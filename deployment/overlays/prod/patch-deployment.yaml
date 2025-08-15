@@ -9,7 +9,4 @@ spec:
     spec:
       containers:
         - name: node-role-controller
-          image: ghcr.io/mchmarny/node-role-controller@sha256:4f3cad359219be1e758cf7eafb90284f7bb280999127b1aa079618541e154766
-          env:
-            - name: ROLE_LABEL
-              value: "nodeGroup"
+          image: ghcr.io/mchmarny/node-role-controller:v0.2.1@sha256:7a4eb6bce88beb2a4b07331c58078b0569647b69829c36c73298a1f2fccc8eb4

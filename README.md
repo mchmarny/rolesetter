@@ -22,6 +22,8 @@ By default, `kubeadm` enables the NodeRestriction admission controller that rest
 
 ## Usage
 
+> Update `deployment/overlays/prod/patch-configmap.yaml` to define the node label you want to use as source for the node role. 
+
 ```sh
 kubectl apply -k deployment/overlays/prod
 ```
@@ -82,6 +84,70 @@ helm repo add sigstore https://sigstore.github.io/helm-charts
 helm repo update
 helm install policy-controller -n cosign-system sigstore/policy-controller
 ```
+
+## Demo 
+
+> Requires [Kind](https://kind.sigs.k8s.io/)
+
+To demo the functionality of this controller, first create a simple Kind configuration file (e.g. `kind.yaml`) to ensure multiple nodes
+
+```yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+
+nodes:
+  - role: control-plane
+    labels:
+      nodeGroup: system
+  - role: worker
+    labels:
+      nodeGroup: worker
+  - role: worker
+    labels:
+      nodeGroup: worker
+```
+
+Next launch a Kind cluster using that config:
+
+```shell
+kind create cluster --config kind.yaml
+```
+
+Set your cluster context: 
+
+```shell
+kubectl cluster-info --context kind
+```
+
+Node, when you run `kubectl get nodes` you should see `3` nodes:
+
+```shell
+NAME                                 STATUS   ROLES           AGE    VERSION
+node-role-controller-control-plane   Ready    control-plane   2m9s   v1.33.1
+node-role-controller-worker          Ready    <none>          114s   v1.33.1
+node-role-controller-worker2         Ready    <none>          114s   v1.33.1
+```
+
+Next, deploy the `node-role-controller`:
+
+```shell
+kubectl apply -k deployment/overlays/prod
+```
+
+When you run the same list nodes command, you will see the roles of the nodes updated based on the value of the `nodeGroup` label: 
+
+```shell
+NAME                                 STATUS   ROLES                  AGE     VERSION
+node-role-controller-control-plane   Ready    control-plane,system   3m12s   v1.33.1
+node-role-controller-worker          Ready    worker                 2m57s   v1.33.1
+node-role-controller-worker2         Ready    worker                 2m57s   v1.33.1
+```
+
+Any new node that joins the cluster will automatically have its role set on a value of that label. 
+
+You can also `kubectl edit node node-role-controller-worker` and change the value of the `nodeGroup` label to see new role being assigned to that node. 
+
+> Note: technically, node can have multiple roles so the `kind-node-role-controller` just adds new one. 
 
 ## Disclaimer
 
