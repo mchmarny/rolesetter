@@ -1,5 +1,5 @@
 APP_NAME           := node-role-controller
-APP_VERSION 	   := v0.1.1
+APP_VERSION 	   := v0.1.2
 YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
 
 # Go 
