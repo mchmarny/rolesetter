@@ -9,6 +9,16 @@ spec:
     spec:
       containers:
         - name: node-role-controller
-          image: ghcr.io/mchmarny/node-role-controller@sha256:6523e7bfe49684819b040f3b467d99cc9275fe668334841b62e640fd87dd65c7
-          args:
-            - "-label=nodeGroup"
+          image: ghcr.io/mchmarny/node-role-controller@sha256:c39ebe5a447ac70657b48f79a8d387e6aead5c3a8ee69bf55ec4e614a1c86de4
+          env:
+            - name: ROLE_LABEL
+              value: "nodeGroup"
+            - name: LOG_LEVEL
+              value: "debug"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 256m
+              memory: 512Mi

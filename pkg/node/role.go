@@ -29,16 +29,21 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("processing role for node", zap.String("node", n.Name), zap.String("roleLabel", h.roleLabel))
+	h.logger.Debug("processing role for node", zap.String("name", n.Name), zap.String("label", h.roleLabel))
 
 	// Check if the node has the expected role label
-	if n.Labels[h.roleLabel] != h.roleLabel {
-		h.logger.Debug("node does not have the correct role label", zap.String("node", n.Name), zap.String("expectedRole", h.roleLabel))
+	val, ok := n.Labels[h.roleLabel]
+	if !ok {
+		h.logger.Debug("node does not have the expected label",
+			zap.String("name", n.Name),
+			zap.String("want", h.roleLabel))
 		return
 	}
 
+	h.logger.Debug("node has the expected label", zap.String("name", n.Name), zap.String("value", val))
+
 	// Check if the node already has the role label
-	roleKey := rolePrefix + h.roleLabel
+	roleKey := rolePrefix + val
 	if _, ok := n.Labels[roleKey]; ok {
 		h.logger.Debug("node already has the role label", zap.String("node", n.Name), zap.String("roleKey", roleKey))
 		return
@@ -55,12 +60,12 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.MaxElapsedTime = 15 * time.Second // Limit total retry duration
-	err := backoff.Retry(op, expBackoff)
-	if err != nil {
+	if err := backoff.Retry(op, expBackoff); err != nil {
 		patchFailure.Inc()
 		h.logger.Error("patch node failed after backoff", zap.String("node", n.Name), zap.Error(err))
-	} else {
-		h.logger.Info("node role label patched successfully", zap.String("node", n.Name), zap.String("roleKey", roleKey))
-		patchSuccess.Inc()
+		return
 	}
+
+	h.logger.Info("node role label patched successfully", zap.String("node", n.Name), zap.String("roleKey", roleKey))
+	patchSuccess.Inc()
 }
