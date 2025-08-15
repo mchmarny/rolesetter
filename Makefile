@@ -1,0 +1,58 @@
+APP_NAME := node-role-controller
+KO_DOCKER_REPO ?= ghcr.io/mchmarny/node-role-controller
+YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
+COMMIT             := $(shell git rev-parse HEAD)
+BRANCH             := $(shell git rev-parse --abbrev-ref HEAD)
+
+# Go 
+GO111MODULE     := on
+CGO_ENABLED	    := 0
+
+# Environment for Go commands
+GO_ENV := \
+	GO111MODULE=$(GO111MODULE) \
+	CGO_ENABLED=$(CGO_ENABLED)
+
+.PHONY: all build push lint clean test help tidy doc upgrade
+
+all: help
+
+build: ## Build the Go binary locally
+	$(GO_ENV) go build -v -o bin/$(APP_NAME) main.go
+
+clean: ## Clean the build artifacts
+	$(GO_ENV) go clean -x; \
+	rm -f bin/$(APP_NAME)
+
+tidy: ## Run go mod tidy in src
+	$(GO_ENV) go fmt ./...; \
+	$(GO_ENV) go mod tidy
+
+upgrade: ## Upgrades all dependencies
+	$(GO_ENV) go get -u ./...; \
+	$(GO_ENV) go mod tidy;
+
+push: ## Build and publish OCI image using ko
+	$(GO_ENV) KO_DOCKER_REPO=$(KO_DOCKER_REPO) ko build --bare --tags latest
+
+lint: ## Lint the Go code and YAML files
+	$(GO_ENV) golangci-lint -c .golangci.yaml run --modules-download-mode=readonly; \
+	yamllint -c .yamllint $(YAML_FILES)
+
+test: ## Run Go tests and generate coverage report
+	$(GO_ENV) go test -count=1 -covermode=atomic -coverprofile=coverage.out ./... || exit 1; \
+	$(GO_ENV) go tool cover -func=coverage.out
+
+vet: ## Vet the Go code
+	$(GO_ENV) go vet ./...
+
+doc: ## Generates documentation
+	$(GO_ENV) go run main.go
+
+qualify: tidy lint test vet doc ## Run all quality checks
+
+help: ## Displays available commands
+	@echo "Available make targets:"; \
+	grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk \
+		'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+

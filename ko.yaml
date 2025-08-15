@@ -1,0 +1,20 @@
+images:
+  ./src/main.go: node-role-controller
+
+# Platforms to build for (optional, overrides --platform)
+platforms:
+  - linux/amd64
+  - linux/arm64
+
+# Environment variables to set at build time (optional)
+env:
+  CGO_ENABLED: "0"
+  GOFLAGS: "-mod=vendor"
+
+# Labels to add to the image (optional)
+labels:
+  maintainer: "mchmarny"
+  org.opencontainers.image.source: "https://github.com/mchmarny/go-commons"
+  org.opencontainers.image.version: "latest"
+  org.opencontainers.image.created: "{{.Date}}"
+  org.opencontainers.image.revision: "{{.Commit}}"
