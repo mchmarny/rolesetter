@@ -1,5 +1,6 @@
-APP_NAME := node-role-controller
-KO_DOCKER_REPO ?= ghcr.io/mchmarny/node-role-controller
+APP_NAME           := node-role-controller
+APP_VERSION 	   := v0.1.0
+KO_DOCKER_REPO     ?= ghcr.io/mchmarny/node-role-controller
 YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
 COMMIT             := $(shell git rev-parse HEAD)
 BRANCH             := $(shell git rev-parse --abbrev-ref HEAD)
@@ -13,7 +14,7 @@ GO_ENV := \
 	GO111MODULE=$(GO111MODULE) \
 	CGO_ENABLED=$(CGO_ENABLED)
 
-.PHONY: all build push lint clean test help tidy doc upgrade
+.PHONY: all build push lint clean test help tidy doc upgrade, tag
 
 all: help
 
@@ -50,6 +51,10 @@ doc: ## Generates documentation
 	$(GO_ENV) go run main.go
 
 qualify: tidy lint test vet doc ## Run all quality checks
+
+tag: ## Creates a release tag
+	git tag -s -m "version bump to $(APP_VERSION)" $(APP_VERSION); \
+	git push origin $(APP_VERSION)
 
 help: ## Displays available commands
 	@echo "Available make targets:"; \
