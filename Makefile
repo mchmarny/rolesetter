@@ -1,5 +1,5 @@
 APP_NAME           := node-role-controller
-APP_VERSION 	   := v0.1.0
+APP_VERSION 	   := v0.1.1
 KO_DOCKER_REPO     ?= ghcr.io/mchmarny/node-role-controller
 YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
 COMMIT             := $(shell git rev-parse HEAD)
