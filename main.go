@@ -45,7 +45,11 @@ func main() {
 	}
 
 	// Create a new informer instance
-	inf, err := node.NewInformer(logger, roleLabel, port)
+	inf, err := node.NewInformer(
+		node.WithLogger(logger),
+		node.WithLabel(roleLabel),
+		node.WithPort(port),
+	)
 	if err != nil {
 		logger.Fatal("failed to create informer", zap.Error(err))
 	}

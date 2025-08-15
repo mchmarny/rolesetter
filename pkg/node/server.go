@@ -8,25 +8,29 @@ import (
 	"go.uber.org/zap"
 )
 
-// startServer initializes and starts the HTTP server for metrics and health checks.
-func (i *Informer) serve(handlers map[string]http.Handler) {
+// buildHandler constructs the HTTP handler mux for the server.
+func (i *Informer) buildHandler(handlers map[string]http.Handler) http.Handler {
+	mux := http.NewServeMux()
 	okFunc := func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
-
-	// health endpoint for liveness probe
-	http.HandleFunc("/healthz", okFunc)
-	http.HandleFunc("/readyz", okFunc)
-	http.HandleFunc("/", okFunc)
-
-	// metrics
+	mux.HandleFunc("/healthz", okFunc)
+	mux.HandleFunc("/readyz", okFunc)
+	mux.HandleFunc("/", okFunc)
 	for path, handler := range handlers {
-		http.Handle(path, handler)
+		mux.Handle(path, handler)
 		i.logger.Info("registered handler", zap.String("path", path))
 	}
+	return mux
+}
+
+// startServer initializes and starts the HTTP server for metrics and health checks.
+func (i *Informer) serve(handlers map[string]http.Handler) {
+	handler := i.buildHandler(handlers)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", i.port),
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,

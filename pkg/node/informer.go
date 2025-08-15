@@ -18,12 +18,62 @@ const (
 	resSyncSeconds = 30
 )
 
-// NewInformer creates a new Informer instance with the provided logger, label, and port.
-func NewInformer(logger *zap.Logger, label string, port int) (*Informer, error) {
+// Informer is responsible for managing the node role setter controller.
+type Informer struct {
+	logger    *zap.Logger
+	label     string
+	port      int
+	clientset kubernetes.Interface
+}
+
+// Option is a functional option for configuring Informer.
+type Option func(*Informer)
+
+// WithLogger sets the logger for the Informer.
+func WithLogger(logger *zap.Logger) Option {
+	return func(i *Informer) {
+		i.logger = logger
+	}
+}
+
+// WithLabel sets the label for the Informer.
+func WithLabel(label string) Option {
+	return func(i *Informer) {
+		i.label = label
+	}
+}
+
+// WithPort sets the port for the Informer.
+func WithPort(port int) Option {
+	return func(i *Informer) {
+		i.port = port
+	}
+}
+
+// WithClientset sets the Kubernetes clientset for the Informer.
+func WithClientset(cs kubernetes.Interface) Option {
+	return func(i *Informer) {
+		i.clientset = cs
+	}
+}
+
+// NewInformer creates a new Informer instance using functional options.
+func NewInformer(opts ...Option) (*Informer, error) {
 	i := &Informer{
-		logger: logger,
-		label:  label,
-		port:   port,
+		logger: zap.NewNop(), // default logger
+		port:   8080,
+	}
+
+	for _, opt := range opts {
+		opt(i)
+	}
+
+	if i.clientset == nil {
+		cs, err := newClient()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Kubernetes client: %w", err)
+		}
+		i.clientset = cs
 	}
 	if err := i.validate(); err != nil {
 		return nil, fmt.Errorf("validation error: %w", err)
@@ -31,26 +81,20 @@ func NewInformer(logger *zap.Logger, label string, port int) (*Informer, error) 
 	return i, nil
 }
 
-// Informer is responsible for managing the node role setter controller.
-type Informer struct {
-	logger *zap.Logger
-	label  string
-	port   int
-}
-
 // Validate checks if the Informer has valid configuration.
 func (i *Informer) validate() error {
 	if i.logger == nil {
 		return fmt.Errorf("logger must not be nil")
 	}
-
 	if i.label == "" {
 		return fmt.Errorf("roleLabel must be specified")
 	}
 	if i.port <= 0 {
 		return fmt.Errorf("serverPort must be a positive integer")
 	}
-
+	if i.clientset == nil {
+		return fmt.Errorf("kubernetes clientset must not be nil")
+	}
 	return nil
 }
 
@@ -62,18 +106,13 @@ func (i *Informer) Inform(ctx context.Context) error {
 
 	i.logger.Info("starting node role setter", zap.String("roleLabel", i.label), zap.Int("port", i.port))
 
-	cs, err := i.newClient()
-	if err != nil {
-		return fmt.Errorf("failed to create Kubernetes client: %w", err)
-	}
-
-	factory := informers.NewSharedInformerFactory(cs, resSyncSeconds*time.Second)
+	factory := informers.NewSharedInformerFactory(i.clientset, resSyncSeconds*time.Second)
 	handler := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			(&cacheResourceHandler{cs: cs, logger: i.logger, roleLabel: i.label}).ensureRole(obj)
+			(&cacheResourceHandler{patcher: nil, logger: i.logger, roleLabel: i.label}).ensureRole(obj)
 		},
 		UpdateFunc: func(_, newObj interface{}) {
-			(&cacheResourceHandler{cs: cs, logger: i.logger, roleLabel: i.label}).ensureRole(newObj)
+			(&cacheResourceHandler{patcher: nil, logger: i.logger, roleLabel: i.label}).ensureRole(newObj)
 		},
 		DeleteFunc: func(_ interface{}) {
 			// nothing to do here
@@ -92,8 +131,6 @@ func (i *Informer) Inform(ctx context.Context) error {
 		})
 	}()
 
-	// OS signal handling and context cancellation should be managed by the parent (main)
-
 	factory.Start(ctx.Done())
 	if !cache.WaitForCacheSync(ctx.Done(), inf.HasSynced) {
 		return fmt.Errorf("cache sync failed")
@@ -104,7 +141,7 @@ func (i *Informer) Inform(ctx context.Context) error {
 }
 
 // newClient creates a Kubernetes clientset for interacting with the cluster.
-func (i *Informer) newClient() (*kubernetes.Clientset, error) {
+func newClient() (kubernetes.Interface, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cluster config: %w", err)

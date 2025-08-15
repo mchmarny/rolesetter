@@ -10,13 +10,15 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 )
+
+// nodePatcher defines the function signature for patching a Node.
+type nodePatcher func(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.Node, err error)
 
 // cacheResourceHandler handles Node events and ensures the correct role label is applied.
 // It implements the cache.ResourceEventHandler interface.
 type cacheResourceHandler struct {
-	cs        *kubernetes.Clientset
+	patcher   nodePatcher
 	logger    *zap.Logger
 	roleLabel string
 }
@@ -54,7 +56,7 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	op := func() error {
-		_, err := h.cs.CoreV1().Nodes().Patch(ctx, n.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
+		_, err := h.patcher(ctx, n.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
 		return err
 	}
 
