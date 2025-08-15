@@ -19,7 +19,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
         - name: node-role-controller
-          image: ghcr.io/mchmarny/node-role-controller:v0.2.2@sha256:e925f34c81d30f80f442f9451bf9ab025823451fbd2680daa28499711e048624
+          image: ghcr.io/mchmarny/node-role-controller:v0.3.0@sha256:269f654338e5df5c6aaf7521282831910c3fe76a093ff36bf09e8d1e893122b2
           env:
             - name: ROLE_LABEL
               valueFrom:
