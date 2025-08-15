@@ -6,7 +6,7 @@ metadata:
   labels:
     app: node-role-controller
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: node-role-controller
@@ -20,8 +20,11 @@ spec:
       containers:
         - name: node-role-controller
           image: ghcr.io/mchmarny/node-role-controller:latest
-          args:
-            - "-label=customer-gpu"
+          env:
+            - name: ROLE_LABEL
+              value: "nodeGroup"
+            - name: LOG_LEVEL
+              value: "debug"
           resources:
             requests:
               cpu: 50m
@@ -34,9 +37,6 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-          env:
-            - name: TZ
-              value: "UTC"
           ports:
             - containerPort: 8080
               name: metrics

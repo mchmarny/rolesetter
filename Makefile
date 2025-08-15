@@ -1,7 +1,8 @@
 APP_NAME           := node-role-controller
-APP_VERSION 	   := v0.1.9
+APP_VERSION 	   := v0.1.10
 YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
-NODE_IMAGE         ?= kindest/node:v1.32.2
+NODE_IMAGE         ?= kindest/node:v1.33.1
+
 CONFIG_FILE        ?= kind.yaml
 
 # Go 
@@ -13,9 +14,11 @@ GO_ENV := \
 	GO111MODULE=$(GO111MODULE) \
 	CGO_ENABLED=$(CGO_ENABLED)
 
-.PHONY: all build lint clean test help tidy doc upgrade, tag
+.PHONY: all build lint clean test help tidy upgrade, tag, pre
 
 all: help
+
+pre: tidy lint test vet ## Run all quality checks
 
 build: ## Build the Go binary locally
 	$(GO_ENV) go build -v -o bin/$(APP_NAME) main.go
@@ -42,11 +45,6 @@ test: ## Run Go tests and generate coverage report
 
 vet: ## Vet the Go code
 	$(GO_ENV) go vet ./...
-
-doc: ## Generates documentation
-	$(GO_ENV) go run main.go
-
-qualify: tidy lint test vet doc ## Run all quality checks
 
 tag: ## Creates a release tag
 	git tag -s -m "version bump to $(APP_VERSION)" $(APP_VERSION); \

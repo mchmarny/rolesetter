@@ -9,9 +9,9 @@ nodes:
 
   - role: worker
     labels:
-      nodeGroup: worker1
+      nodeGroup: worker
 
 
   - role: worker
     labels:
-      nodeGroup: worker2
+      nodeGroup: worker

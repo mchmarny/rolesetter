@@ -7,12 +7,13 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/mchmarny/rolesetter/pkg/log"
 	"github.com/mchmarny/rolesetter/pkg/node"
 	"go.uber.org/zap"
 )
 
 func main() {
-	logger, _ := zap.NewProduction()
+	logger := log.GetLogger()
 	defer func() { _ = logger.Sync() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
