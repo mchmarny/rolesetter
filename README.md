@@ -1,7 +1,5 @@
 # Kubernetes Node Role Labeler
 
-![](images/workflow-tag.png)
-
 Kubernetes controller that automatically assign node role based on a value of specific node label (e.g., `nodeGroup=gpu-worker` == `node-role.kubernetes.io/gpu-worker`).
 
 ## Why 
