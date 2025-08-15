@@ -1,6 +1,8 @@
 APP_NAME           := node-role-controller
 APP_VERSION 	   := v0.1.8
 YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
+NODE_IMAGE         ?= kindest/node:v1.32.2
+CONFIG_FILE        ?= kind.yaml
 
 # Go 
 GO111MODULE     := on
@@ -49,6 +51,12 @@ qualify: tidy lint test vet doc ## Run all quality checks
 tag: ## Creates a release tag
 	git tag -s -m "version bump to $(APP_VERSION)" $(APP_VERSION); \
 	git push origin $(APP_VERSION)
+
+up: ## Create a Kubernetes cluster with KinD
+	kind create cluster --name $(APP_NAME) --image $(NODE_IMAGE) --config $(CONFIG_FILE) --wait 5m
+
+down: ## Delete a Kubernetes cluster with KinD
+	kind delete cluster --name $(APP_NAME)
 
 help: ## Displays available commands
 	@echo "Available make targets:"; \

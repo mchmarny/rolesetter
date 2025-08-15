@@ -74,7 +74,7 @@ jobs:
           --type slsaprovenance \
           --certificate-identity-regexp "^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v[0-9]+.[0-9]+.[0-9]+$" \
           --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-          --policy policy/provenance.cue \
+          --policy provenance.cue \
           ${{ inputs.image_digest }}
 
     - uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6  # v2.7.1
