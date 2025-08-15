@@ -4,21 +4,12 @@ metadata:
   name: node-role-controller
   namespace: node-labeler
 spec:
-  replicas: 1
+  replicas: 2
   template:
     spec:
       containers:
         - name: node-role-controller
-          image: ghcr.io/mchmarny/node-role-controller@sha256:c39ebe5a447ac70657b48f79a8d387e6aead5c3a8ee69bf55ec4e614a1c86de4
+          image: ghcr.io/mchmarny/node-role-controller@sha256:4f3cad359219be1e758cf7eafb90284f7bb280999127b1aa079618541e154766
           env:
             - name: ROLE_LABEL
               value: "nodeGroup"
-            - name: LOG_LEVEL
-              value: "debug"
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 256m
-              memory: 512Mi

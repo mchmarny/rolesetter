@@ -61,11 +61,11 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.MaxElapsedTime = 15 * time.Second // Limit total retry duration
 	if err := backoff.Retry(op, expBackoff); err != nil {
-		patchFailure.Inc()
+		incFailureMetric()
 		h.logger.Error("patch node failed after backoff", zap.String("node", n.Name), zap.Error(err))
 		return
 	}
 
 	h.logger.Info("node role label patched successfully", zap.String("node", n.Name), zap.String("roleKey", roleKey))
-	patchSuccess.Inc()
+	incSuccessMetric()
 }
