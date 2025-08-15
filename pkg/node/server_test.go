@@ -22,6 +22,7 @@ func TestServe_HealthAndReadyEndpoints(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to GET %s: %v", ep, err)
 		}
+		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("expected 200 OK for %s, got %d", ep, resp.StatusCode)
 		}
