@@ -66,7 +66,17 @@ jobs:
       run: |
         ko login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
 
-    # Note: ko build image ref will include BOTH, the tag AND digest of the image.
+    - name: Show effective permissions
+      run: |
+        echo "actor=${{ github.actor }}"
+        echo "owner=${{ github.repository_owner }}"
+        echo "ref=${{ github.ref }}"
+        echo "repo=${{ github.repository }}"
+
+    - name: Verify Docker auth entry for ghcr.io
+      run: |
+        cat ~/.docker/config.json | jq '.auths["ghcr.io"] | has("auth")'
+
     - name: Build Image
       id: image
       env:
