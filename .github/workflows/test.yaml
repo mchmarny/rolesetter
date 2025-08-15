@@ -7,7 +7,7 @@ on:
         description: 'Go version to use'
         required: false
         type: string
-        default: '1.21.6'
+        default: '1.25.0'
       scan_severity:
         description: 'Trivy scan severity'
         required: false
@@ -17,7 +17,7 @@ on:
         description: 'golangci version to use'
         required: false
         type: string
-        default: v1.55
+        default: v2.4.0
 
 permissions:
   contents: read
@@ -43,7 +43,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
     - name: Checkout Code
-      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v3.4.0
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v3.4.0
     - name: Tidy Modules
       run: |
         make tidy
@@ -75,13 +75,13 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
     - name: Checkout Code
-      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v3.4.0
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v3.4.0
     - name: Tidy Modules
       run: |
         make tidy
     - name: Config Go Lint
       id: golangci_config
-      uses: andstor/file-existence-action@20b4d2e596410855db8f9ca21e96fbe18e12930b  # v2.0
+      uses: andstor/file-existence-action@076e0072799f4942c8bc574a82233e1e4d13e9d6  # v2.0
       with:
         files: .golangci.yaml
     - name: Lint Go
@@ -91,7 +91,7 @@ jobs:
         version: ${{ inputs.golangci_version }}
     - name: Config YAML Lint
       id: yamllint_config
-      uses: andstor/file-existence-action@20b4d2e596410855db8f9ca21e96fbe18e12930b  # v2.0
+      uses: andstor/file-existence-action@076e0072799f4942c8bc574a82233e1e4d13e9d6  # v2.0
       with:
         files: .yamllint
     - name: Lint YAML
@@ -106,9 +106,9 @@ jobs:
       security-events: write
     steps:
     - name: Checkout Code
-      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v3.4.0
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v3.4.0
     - name: Scan Repo
-      uses: aquasecurity/trivy-action@d43c1f16c00cfd3978dde6c07f4bbcf9eb6993ca  # master
+      uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4  # master
       with:
         scan-type: 'fs'
         ignore-unfixed: true
