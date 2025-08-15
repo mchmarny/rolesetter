@@ -83,9 +83,10 @@ func TestEnsureRole_PatchFailure(t *testing.T) {
 
 func TestMakePatchMetadata(t *testing.T) {
 	tests := []struct {
-		name  string
-		input map[string]string
-		want  []string
+		name    string
+		input   map[string]string
+		want    []string
+		replace bool
 	}{
 		{
 			name:  "single label",

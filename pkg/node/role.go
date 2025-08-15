@@ -63,12 +63,11 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 	}
 
 	if h.replace {
+		// If replace is true, remove any existing role labels
 		for k := range n.Labels {
 			if strings.HasPrefix(k, rolePrefix) {
 				h.logger.Debug("node already has a role label, deleting", zap.String("node", n.Name), zap.String("roleKey", k))
-				// delete the existing role label
 				labels[k] = "nill"
-				break
 			}
 		}
 	}
