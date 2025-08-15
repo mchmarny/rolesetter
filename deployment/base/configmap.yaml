@@ -5,3 +5,4 @@ metadata:
   namespace: node-labeler
 data:
   roleLabel: "nodeGroup"
+  roleReplace: "false"

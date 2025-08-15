@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/mchmarny/rolesetter/pkg/log"
@@ -38,6 +39,9 @@ func main() {
 		serverPort = "8080" // Default port if not set
 	}
 
+	roleLabelReplace := strings.TrimSpace(strings.ToLower(os.Getenv("ROLE_LABEL_REPLACE")))
+	replace := roleLabelReplace == "true" || roleLabelReplace == "1" || roleLabelReplace == "yes"
+
 	// parse integer port
 	port, err := strconv.Atoi(serverPort)
 	if err != nil || port <= 0 {
@@ -49,6 +53,7 @@ func main() {
 		node.WithLogger(logger),
 		node.WithLabel(roleLabel),
 		node.WithPort(port),
+		node.WithReplace(replace),
 	)
 	if err != nil {
 		logger.Fatal("failed to create informer", zap.Error(err))

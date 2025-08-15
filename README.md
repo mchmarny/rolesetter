@@ -22,7 +22,20 @@ By default, `kubeadm` enables the NodeRestriction admission controller that rest
 
 ## Usage
 
-> Update `deployment/overlays/prod/patch-configmap.yaml` to define the node label you want to use as source for the node role. 
+Update [patch-configmap.yaml](deployment/overlays/prod/patch-configmap.yaml) to define the node label you want to use as source for the node role. Fro example: 
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-role-controller-config
+  namespace: node-labeler
+data:
+  roleLabel: "nodeGroup" # value of this label will be the node role 
+  roleReplace: "false"   # whether to replace the existing node role if one exists
+```
+
+Then apply to the cluster: 
 
 ```sh
 kubectl apply -k deployment/overlays/prod

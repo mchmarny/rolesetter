@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	rolePrefix     = "node-role.kubernetes.io/"
 	resSyncSeconds = 30
 )
 
@@ -22,12 +21,19 @@ const (
 type Informer struct {
 	logger    *zap.Logger
 	label     string
+	replace   bool
 	port      int
 	clientset kubernetes.Interface
 }
 
 // Option is a functional option for configuring Informer.
 type Option func(*Informer)
+
+func WithReplace(replace bool) Option {
+	return func(i *Informer) {
+		i.replace = replace
+	}
+}
 
 // WithLogger sets the logger for the Informer.
 func WithLogger(logger *zap.Logger) Option {
@@ -109,10 +115,20 @@ func (i *Informer) Inform(ctx context.Context) error {
 	factory := informers.NewSharedInformerFactory(i.clientset, resSyncSeconds*time.Second)
 	handler := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			(&cacheResourceHandler{patcher: nil, logger: i.logger, roleLabel: i.label}).ensureRole(obj)
+			(&cacheResourceHandler{
+				patcher:   nil,
+				logger:    i.logger,
+				replace:   i.replace,
+				roleLabel: i.label,
+			}).ensureRole(obj)
 		},
 		UpdateFunc: func(_, newObj interface{}) {
-			(&cacheResourceHandler{patcher: nil, logger: i.logger, roleLabel: i.label}).ensureRole(newObj)
+			(&cacheResourceHandler{
+				patcher:   nil,
+				logger:    i.logger,
+				replace:   i.replace,
+				roleLabel: i.label,
+			}).ensureRole(newObj)
 		},
 		DeleteFunc: func(_ interface{}) {
 			// nothing to do here

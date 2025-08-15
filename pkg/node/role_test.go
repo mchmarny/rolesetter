@@ -80,3 +80,42 @@ func TestEnsureRole_PatchFailure(t *testing.T) {
 	}
 	h.ensureRole(n) // Should log error
 }
+
+func TestMakePatchMetadata(t *testing.T) {
+	tests := []struct {
+		name  string
+		input map[string]string
+		want  []string
+	}{
+		{
+			name:  "single label",
+			input: map[string]string{"foo": "bar"},
+			want:  []string{`{"metadata":{"labels":{"foo":"bar"}}}`},
+		},
+		{
+			name:  "multiple labels",
+			input: map[string]string{"foo": "bar", "baz": "qux"},
+			want: []string{
+				`{"metadata":{"labels":{"foo":"bar","baz":"qux"}}}`,
+				`{"metadata":{"labels":{"baz":"qux","foo":"bar"}}}`,
+			},
+		},
+		{
+			name:  "empty labels",
+			input: map[string]string{},
+			want:  []string{`{"metadata":{"labels":{}}}`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := string(makePatchMetadata(tt.input))
+			for _, want := range tt.want {
+				if got == want {
+					return // Found a match, no need to check further
+				}
+			}
+			t.Errorf("makePatchMetadata() = %s, want one of %v", got, tt.want)
+		})
+	}
+}

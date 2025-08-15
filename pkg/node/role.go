@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -10,6 +11,10 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/types"
+)
+
+const (
+	rolePrefix = "node-role.kubernetes.io/"
 )
 
 // nodePatcher defines the function signature for patching a Node.
@@ -21,6 +26,7 @@ type cacheResourceHandler struct {
 	patcher   nodePatcher
 	logger    *zap.Logger
 	roleLabel string
+	replace   bool
 }
 
 // ensureRole checks if the Node has the correct role label and patches it if necessary.
@@ -51,12 +57,27 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 		return
 	}
 
-	// Patch the node to add the role label
-	patch := []byte(`{"metadata":{"labels":{"` + roleKey + `":""}}}`)
+	// setup the labels to patch
+	labels := map[string]string{
+		roleKey: "",
+	}
+
+	if h.replace {
+		for k := range n.Labels {
+			if strings.HasPrefix(k, rolePrefix) {
+				h.logger.Debug("node already has a role label, deleting", zap.String("node", n.Name), zap.String("roleKey", k))
+				// delete the existing role label
+				labels[k] = "nill"
+				break
+			}
+		}
+	}
+
+	// patch the node with the new roles
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	op := func() error {
-		_, err := h.patcher(ctx, n.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
+		_, err := h.patcher(ctx, n.Name, types.StrategicMergePatchType, makePatchMetadata(labels), metav1.PatchOptions{})
 		return err
 	}
 
@@ -70,4 +91,17 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 
 	h.logger.Info("node role label patched successfully", zap.String("node", n.Name), zap.String("roleKey", roleKey))
 	incSuccessMetric()
+}
+
+// makePatchMetadata creates a patch metadata for the given roles.
+func makePatchMetadata(roles map[string]string) []byte {
+	patch := `{"metadata":{"labels":{`
+	for k, v := range roles {
+		if patch[len(patch)-1] != '{' {
+			patch += ","
+		}
+		patch += `"` + k + `":"` + v + `"`
+	}
+	patch += "}}}"
+	return []byte(patch)
 }

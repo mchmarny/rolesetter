@@ -26,6 +26,11 @@ spec:
                 configMapKeyRef:
                   name: node-role-controller-config
                   key: roleLabel
+            - name: ROLE_LABEL_REPLACE
+              valueFrom:
+                configMapKeyRef:
+                  name: node-role-controller-config
+                  key: roleReplace
           resources:
             requests:
               cpu: 50m
