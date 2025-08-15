@@ -7,7 +7,7 @@ on:
         description: 'Go version to use'
         required: false
         type: string
-        default: '1.21.6'
+        default: '1.25.0'
       scan_severity:
         description: 'Trivy scan severity'
         required: false
@@ -17,7 +17,7 @@ on:
         description: 'golangci version to use'
         required: false
         type: string
-        default: v1.55
+        default: v2.4.0
 
 permissions:
   contents: read
