@@ -34,8 +34,8 @@ This will ensure all nodes with `nodeGroup=customer-gpu` are labeled with `node-
 
 The `node-role-controller` emits following metrics: 
 
-- `node_patch_success_total`: Number of successful node patch operations.
-- `node_patch_failure_total`: Number of failed node patch operations.
+- `node_role_patch_success_total`: Number of successful node patch operations.
+- `node_role_patch_failure_total`: Number of failed node patch operations.
 
 ## Validation (optional)
 
