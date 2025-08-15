@@ -43,6 +43,9 @@ jobs:
         COSIGN_PASSWORD=$(openssl rand -base64 12)
         cosign generate-key-pair
 
+    - name: Get Version
+      run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+
     - name: Sign Image
       env:
         COSIGN_YES: true
@@ -52,7 +55,7 @@ jobs:
             -a sha=${{ github.sha }} \
             -a run_id=${{ github.run_id }} \
             -a run_attempt=${{ github.run_attempt }} \
-            -a tag=${{ env.GITHUB_REF_NAME }}
+            -a tag=${{ env.RELEASE_VERSION }}
 
     - name: Verify Signature
       run: |
