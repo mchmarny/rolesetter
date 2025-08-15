@@ -11,8 +11,7 @@ jobs:
 
   conf:
     env:
-      # Update as needed
-      IMG_NAME: s3cme
+      IMG_NAME: node-role-controller
       GO_VERSION: '1.25.0'
       COSIGN_VERSION: v2.5.0
       ERR_VULNERABILITY_SEV: 'CRITICAL,HIGH,MEDIUM'

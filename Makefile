@@ -1,9 +1,6 @@
 APP_NAME           := node-role-controller
 APP_VERSION 	   := v0.1.1
-KO_DOCKER_REPO     ?= ghcr.io/mchmarny/node-role-controller
 YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
-COMMIT             := $(shell git rev-parse HEAD)
-BRANCH             := $(shell git rev-parse --abbrev-ref HEAD)
 
 # Go 
 GO111MODULE     := on
@@ -14,7 +11,7 @@ GO_ENV := \
 	GO111MODULE=$(GO111MODULE) \
 	CGO_ENABLED=$(CGO_ENABLED)
 
-.PHONY: all build push lint clean test help tidy doc upgrade, tag
+.PHONY: all build lint clean test help tidy doc upgrade, tag
 
 all: help
 
@@ -32,9 +29,6 @@ tidy: ## Run go mod tidy in src
 upgrade: ## Upgrades all dependencies
 	$(GO_ENV) go get -u ./...; \
 	$(GO_ENV) go mod tidy;
-
-push: ## Build and publish OCI image using ko
-	$(GO_ENV) KO_DOCKER_REPO=$(KO_DOCKER_REPO) ko build --bare --tags latest
 
 lint: ## Lint the Go code and YAML files
 	$(GO_ENV) golangci-lint -c .golangci.yaml run --modules-download-mode=readonly; \
