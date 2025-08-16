@@ -113,11 +113,12 @@ func (i *Informer) Inform(ctx context.Context) error {
 
 	i.logger.Info("starting node role setter", zap.String("roleLabel", i.label), zap.Int("port", i.port))
 
+	patcher := i.clientset.CoreV1().Nodes().Patch
 	factory := informers.NewSharedInformerFactory(i.clientset, resSyncSeconds*time.Second)
 	handler := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			(&cacheResourceHandler{
-				patcher:   nil,
+				patcher:   patcher,
 				logger:    i.logger,
 				replace:   i.replace,
 				roleLabel: i.label,
@@ -125,7 +126,7 @@ func (i *Informer) Inform(ctx context.Context) error {
 		},
 		UpdateFunc: func(_, newObj interface{}) {
 			(&cacheResourceHandler{
-				patcher:   nil,
+				patcher:   patcher,
 				logger:    i.logger,
 				replace:   i.replace,
 				roleLabel: i.label,
