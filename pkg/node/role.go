@@ -64,8 +64,8 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 	}
 
 	// setup the labels to patch
-	labels := map[string]string{
-		roleKey: "",
+	labels := map[string]bool{
+		roleKey: true,
 	}
 
 	if h.replace {
@@ -73,7 +73,7 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 		for k := range n.Labels {
 			if strings.HasPrefix(k, rolePrefix) {
 				h.logger.Debug("node already has a role label, deleting", zap.String("node", n.Name), zap.String("roleKey", k))
-				labels[k] = "null"
+				labels[k] = false
 			}
 		}
 	}
@@ -103,14 +103,26 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 }
 
 // makePatchMetadata creates a patch metadata for the given roles.
-func makePatchMetadata(roles map[string]string) []byte {
+// https://kubernetes.io/docs/tasks/manage-kubernetes-objects/update-api-object-k
+func makePatchMetadata(roles map[string]bool) []byte {
 	patch := `{"metadata":{"labels":{`
+
 	for k, v := range roles {
 		if patch[len(patch)-1] != '{' {
 			patch += ","
 		}
-		patch += `"` + k + `":"` + v + `"`
+
+		if v {
+			// regular label with value
+			// empty string indicates a regular label with no value
+			patch += `"` + k + `":""`
+		} else {
+			// label to be removed
+			// null value indicates deletion in the patch
+			patch += `"` + k + `":null`
+		}
 	}
+
 	patch += "}}}"
 	return []byte(patch)
 }

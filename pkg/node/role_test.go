@@ -84,27 +84,30 @@ func TestEnsureRole_PatchFailure(t *testing.T) {
 func TestMakePatchMetadata(t *testing.T) {
 	tests := []struct {
 		name    string
-		input   map[string]string
+		input   map[string]bool
 		want    []string
 		replace bool
 	}{
 		{
-			name:  "single label",
-			input: map[string]string{"foo": "bar"},
-			want:  []string{`{"metadata":{"labels":{"foo":"bar"}}}`},
+			name:  "single without replace",
+			input: map[string]bool{"foo": true},
+			want:  []string{`{"metadata":{"labels":{"foo":""}}}`},
 		},
 		{
-			name:  "multiple labels",
-			input: map[string]string{"foo": "bar", "baz": "qux"},
+			name:  "multiple without replace",
+			input: map[string]bool{"foo": true, "bar": true},
 			want: []string{
-				`{"metadata":{"labels":{"foo":"bar","baz":"qux"}}}`,
-				`{"metadata":{"labels":{"baz":"qux","foo":"bar"}}}`,
+				`{"metadata":{"labels":{"foo":"","bar":""}}}`,
+				`{"metadata":{"labels":{"bar":"","foo":""}}}`,
 			},
 		},
 		{
-			name:  "empty labels",
-			input: map[string]string{},
-			want:  []string{`{"metadata":{"labels":{}}}`},
+			name:  "multiple with replace",
+			input: map[string]bool{"foo": true, "bar": false},
+			want: []string{
+				`{"metadata":{"labels":{"foo":"","bar":null}}}`,
+				`{"metadata":{"labels":{"bar":null,"foo":""}}}`,
+			},
 		},
 	}
 
