@@ -81,6 +81,10 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 	// patch the node with the new roles
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	if h.patcher == nil {
+		h.logger.Error("patcher is nil, cannot patch node", zap.String("node", n.Name))
+		return
+	}
 	op := func() error {
 		_, err := h.patcher(ctx, n.Name, types.StrategicMergePatchType, makePatchMetadata(labels), metav1.PatchOptions{})
 		return err

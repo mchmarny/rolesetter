@@ -6,3 +6,4 @@ metadata:
 data:
   roleLabel: "nodeGroup"
   roleReplace: "false"
+  logLevel: "info"
