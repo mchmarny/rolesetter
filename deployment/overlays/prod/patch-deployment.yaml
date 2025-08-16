@@ -9,4 +9,4 @@ spec:
     spec:
       containers:
         - name: node-role-controller
-          image: ghcr.io/mchmarny/node-role-controller:v0.3.3@sha256:11adb28b55d4c7af0e3719dfcda557922caab0ad44cc8b729e785d851bc306c4
+          image: ghcr.io/mchmarny/node-role-controller:v0.3.4@sha256:d5f82283cfb092ba1cbb893b53472fa6e019f0fd651cbe964036ecb770044195

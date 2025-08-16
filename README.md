@@ -43,6 +43,8 @@ kubectl apply -k deployment/overlays/prod
 
 This will ensure all nodes with `nodeGroup=customer-gpu` are labeled with `node-role.kubernetes.io/customer-gpu`.
 
+> If you change ConfigMap value after the deployment remember to restart the deployment: `kubectl -n node-labeler rollout restart deployment node-role-controller`
+
 ## Metrics
 
 The `node-role-controller` emits following metrics: 
