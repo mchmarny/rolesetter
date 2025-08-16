@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/mchmarny/rolesetter/pkg/metric"
 	"go.uber.org/zap"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -143,7 +144,7 @@ func (i *Informer) Inform(ctx context.Context) error {
 	// Start the informer and metrics server
 	go func() {
 		i.serve(map[string]http.Handler{
-			"/metrics": getMetricHandler(),
+			"/metrics": metric.GetHandler(),
 		})
 	}()
 

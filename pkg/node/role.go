@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	backoff "github.com/cenkalti/backoff/v4"
+	"github.com/mchmarny/rolesetter/pkg/metric"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -28,6 +29,11 @@ type cacheResourceHandler struct {
 	roleLabel string
 	replace   bool
 }
+
+var (
+	successCounter = metric.NewCounter("node_role_patch_success_total", "Total number of successful node role patches")
+	failureCounter = metric.NewCounter("node_role_patch_failure_total", "Total number of failed node role patches")
+)
 
 // ensureRole checks if the Node has the correct role label and patches it if necessary.
 func (h *cacheResourceHandler) ensureRole(obj interface{}) {
@@ -67,7 +73,7 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 		for k := range n.Labels {
 			if strings.HasPrefix(k, rolePrefix) {
 				h.logger.Debug("node already has a role label, deleting", zap.String("node", n.Name), zap.String("roleKey", k))
-				labels[k] = "nill"
+				labels[k] = "null"
 			}
 		}
 	}
@@ -83,13 +89,13 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.MaxElapsedTime = 15 * time.Second // Limit total retry duration
 	if err := backoff.Retry(op, expBackoff); err != nil {
-		incFailureMetric()
+		failureCounter.Inc()
 		h.logger.Error("patch node failed after backoff", zap.String("node", n.Name), zap.Error(err))
 		return
 	}
 
 	h.logger.Info("node role label patched successfully", zap.String("node", n.Name), zap.String("roleKey", roleKey))
-	incSuccessMetric()
+	successCounter.Inc()
 }
 
 // makePatchMetadata creates a patch metadata for the given roles.
