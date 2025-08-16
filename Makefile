@@ -41,6 +41,7 @@ lint: ## Lint the Go code and YAML files
 
 test: ## Run Go tests and generate coverage report
 	$(GO_ENV) go test -count=1 -covermode=atomic -coverprofile=coverage.out ./... || exit 1; \
+	echo "Generating coverage report..."; \
 	$(GO_ENV) go tool cover -func=coverage.out
 
 vet: ## Vet the Go code

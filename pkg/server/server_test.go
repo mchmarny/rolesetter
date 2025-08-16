@@ -53,3 +53,36 @@ func TestBuildHandler_RegistersMetricsHandler(t *testing.T) {
 		t.Error("metrics handler was not called")
 	}
 }
+
+func TestWithLogger_SetsLogger(t *testing.T) {
+	s := &server{}
+	l := log.GetTestLogger()
+	WithLogger(l)(s)
+	if s.logger != l {
+		t.Error("WithLogger did not set logger")
+	}
+}
+
+func TestWithPort_SetsPort(t *testing.T) {
+	s := &server{}
+	WithPort(1234)(s)
+	if s.port != 1234 {
+		t.Error("WithPort did not set port")
+	}
+}
+
+func TestNewServer_DefaultsAndOptions(t *testing.T) {
+	s := NewServer()
+	if s == nil {
+		t.Error("NewServer returned nil")
+	}
+	custom := NewServer(WithLogger(log.GetTestLogger()), WithPort(4321))
+	// Type assertion to access fields
+	impl, ok := custom.(*server)
+	if !ok {
+		t.Error("NewServer did not return *server type")
+	}
+	if impl.port != 4321 {
+		t.Errorf("expected port 4321, got %d", impl.port)
+	}
+}
