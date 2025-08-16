@@ -1,7 +1,8 @@
-package node
+package role
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -18,16 +19,36 @@ const (
 	rolePrefix = "node-role.kubernetes.io/"
 )
 
-// nodePatcher defines the function signature for patching a Node.
-type nodePatcher func(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.Node, err error)
+// NodePatcher defines the function signature for patching a Node.
+type NodePatcher func(
+	ctx context.Context,
+	name string,
+	pt types.PatchType,
+	data []byte,
+	opts metav1.PatchOptions,
+	subresources ...string) (result *corev1.Node, err error)
 
-// cacheResourceHandler handles Node events and ensures the correct role label is applied.
+// CacheResourceHandler handles Node events and ensures the correct role label is applied.
 // It implements the cache.ResourceEventHandler interface.
-type cacheResourceHandler struct {
-	patcher   nodePatcher
-	logger    *zap.Logger
-	roleLabel string
-	replace   bool
+type CacheResourceHandler struct {
+	Patcher   NodePatcher
+	Logger    *zap.Logger
+	RoleLabel string
+	Replace   bool
+}
+
+// validate checks if the CacheResourceHandler is properly configured.
+func (h *CacheResourceHandler) validate() error {
+	if h.Patcher == nil {
+		return fmt.Errorf("patcher must not be nil")
+	}
+	if h.Logger == nil {
+		return fmt.Errorf("logger must not be nil")
+	}
+	if h.RoleLabel == "" {
+		return fmt.Errorf("role label must not be empty")
+	}
+	return nil
 }
 
 var (
@@ -36,30 +57,45 @@ var (
 )
 
 // ensureRole checks if the Node has the correct role label and patches it if necessary.
-func (h *cacheResourceHandler) ensureRole(obj interface{}) {
+func (h *CacheResourceHandler) EnsureRole(obj interface{}) {
+	if err := h.validate(); err != nil {
+		h.Logger.Error("validation error", zap.Error(err))
+		return
+	}
+
 	n, ok := obj.(*corev1.Node)
 	if !ok {
-		h.logger.Warn("object is not a Node")
+		h.Logger.Warn("object is not a Node")
 		return
 	}
 
-	h.logger.Debug("processing role for node", zap.String("name", n.Name), zap.String("label", h.roleLabel))
+	h.Logger.Debug("processing role for node",
+		zap.String("name", n.Name),
+		zap.String("label", h.RoleLabel),
+	)
 
 	// Check if the node has the expected role label
-	val, ok := n.Labels[h.roleLabel]
+	val, ok := n.Labels[h.RoleLabel]
 	if !ok {
-		h.logger.Debug("node does not have the expected label",
+		h.Logger.Debug("node does not have the expected label",
 			zap.String("name", n.Name),
-			zap.String("want", h.roleLabel))
+			zap.String("want", h.RoleLabel),
+		)
 		return
 	}
 
-	h.logger.Debug("node has the expected label", zap.String("name", n.Name), zap.String("value", val))
+	h.Logger.Debug("node has the expected label",
+		zap.String("name", n.Name),
+		zap.String("value", val),
+	)
 
 	// Check if the node already has the role label
 	roleKey := rolePrefix + val
 	if _, ok := n.Labels[roleKey]; ok {
-		h.logger.Debug("node already has the role label", zap.String("node", n.Name), zap.String("roleKey", roleKey))
+		h.Logger.Debug("node already has the role label",
+			zap.String("node", n.Name),
+			zap.String("roleKey", roleKey),
+		)
 		return
 	}
 
@@ -68,11 +104,14 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 		roleKey: true,
 	}
 
-	if h.replace {
+	if h.Replace {
 		// If replace is true, remove any existing role labels
 		for k := range n.Labels {
 			if strings.HasPrefix(k, rolePrefix) {
-				h.logger.Debug("node already has a role label, deleting", zap.String("node", n.Name), zap.String("roleKey", k))
+				h.Logger.Debug("node already has a role label, deleting",
+					zap.String("node", n.Name),
+					zap.String("roleKey", k),
+				)
 				labels[k] = false
 			}
 		}
@@ -81,25 +120,39 @@ func (h *cacheResourceHandler) ensureRole(obj interface{}) {
 	// patch the node with the new roles
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if h.patcher == nil {
-		h.logger.Error("patcher is nil, cannot patch node", zap.String("node", n.Name))
-		return
-	}
+
 	op := func() error {
-		_, err := h.patcher(ctx, n.Name, types.StrategicMergePatchType, makePatchMetadata(labels), metav1.PatchOptions{})
-		return err
+		if _, err := h.Patcher(
+			ctx, n.Name,
+			types.StrategicMergePatchType,
+			makePatchMetadata(labels),
+			metav1.PatchOptions{},
+		); err != nil {
+			return fmt.Errorf("failed to patch node %s: %w", n.Name, err)
+		}
+		return nil
 	}
 
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.MaxElapsedTime = 15 * time.Second // Limit total retry duration
 	if err := backoff.Retry(op, expBackoff); err != nil {
 		failureCounter.Inc()
-		h.logger.Error("patch node failed after backoff", zap.String("node", n.Name), zap.Error(err))
+		h.Logger.Error("patch node failed after backoff",
+			zap.String("node", n.Name),
+			zap.String("roleKey", roleKey),
+			zap.Bool("replace", h.Replace),
+			zap.Error(err),
+		)
 		return
 	}
 
-	h.logger.Info("node role label patched successfully", zap.String("node", n.Name), zap.String("roleKey", roleKey))
 	successCounter.Inc()
+
+	h.Logger.Info("node role label patched successfully",
+		zap.String("node", n.Name),
+		zap.String("roleKey", roleKey),
+		zap.Bool("replace", h.Replace),
+	)
 }
 
 // makePatchMetadata creates a patch metadata for the given roles.

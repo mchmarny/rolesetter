@@ -4,19 +4,25 @@ import (
 	"context"
 	"testing"
 
-	"go.uber.org/zap"
+	"github.com/mchmarny/rolesetter/pkg/log"
+	"github.com/mchmarny/rolesetter/pkg/server"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestInformer_Validate(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := log.GetTestLogger()
 	clientset := fake.NewSimpleClientset()
+	srv := server.NewServer(
+		server.WithLogger(logger),
+		server.WithPort(8080),
+	)
 
 	inf := &Informer{
 		logger:    logger,
 		label:     "test-label",
 		port:      8080,
 		clientset: clientset,
+		server:    srv,
 	}
 	if err := inf.validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -24,14 +30,19 @@ func TestInformer_Validate(t *testing.T) {
 }
 
 func TestInformer_Inform_ContextCancel(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := log.GetTestLogger()
 	clientset := fake.NewSimpleClientset()
+	srv := server.NewServer(
+		server.WithLogger(logger),
+		server.WithPort(8080),
+	)
 
 	inf := &Informer{
 		logger:    logger,
 		label:     "test-label",
 		port:      8080,
 		clientset: clientset,
+		server:    srv,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately

@@ -1,18 +1,17 @@
-package node
+package server
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"go.uber.org/zap/zaptest"
+	"github.com/mchmarny/rolesetter/pkg/log"
 )
 
 func TestBuildHandler_HealthAndReadyEndpoints(t *testing.T) {
-	logger := zaptest.NewLogger(t)
-	inf := &Informer{logger: logger, port: 8080}
-
-	handler := inf.buildHandler(nil)
+	logger := log.GetTestLogger()
+	srv := &server{logger: logger, port: 8080}
+	handler := srv.buildHandler(nil)
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
@@ -30,15 +29,15 @@ func TestBuildHandler_HealthAndReadyEndpoints(t *testing.T) {
 }
 
 func TestBuildHandler_RegistersMetricsHandler(t *testing.T) {
-	logger := zaptest.NewLogger(t)
-	inf := &Informer{logger: logger, port: 8080}
+	logger := log.GetTestLogger()
+	srv := &server{logger: logger, port: 8080}
 	metricsCalled := false
 	metricsHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		metricsCalled = true
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := inf.buildHandler(map[string]http.Handler{"/metrics": metricsHandler})
+	handler := srv.buildHandler(map[string]http.Handler{"/metrics": metricsHandler})
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
