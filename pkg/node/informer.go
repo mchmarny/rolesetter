@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/mchmarny/rolesetter/pkg/log"
 	"github.com/mchmarny/rolesetter/pkg/metric"
 	"go.uber.org/zap"
 	"k8s.io/client-go/informers"
@@ -67,7 +68,7 @@ func WithClientset(cs kubernetes.Interface) Option {
 // NewInformer creates a new Informer instance using functional options.
 func NewInformer(opts ...Option) (*Informer, error) {
 	i := &Informer{
-		logger: zap.NewNop(), // default logger
+		logger: log.GetLogger(), // default logger
 		port:   8080,
 	}
 
