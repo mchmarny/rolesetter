@@ -28,7 +28,7 @@ permissions:
   packages: read
 jobs:
 
-  integration:
+  test:
     runs-on: ubuntu-latest
     steps:
 

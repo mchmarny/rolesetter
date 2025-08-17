@@ -16,7 +16,7 @@ jobs:
       COSIGN_VERSION: v2.5.0
       ERR_VULNERABILITY_SEV: 'CRITICAL,HIGH,MEDIUM'
       KIND_VERSION: '0.29.0'
-      WORKER_NODE_COUNT: 2
+      WORKER_NODE_COUNT: '2'
       K8S_VERSION: '1.33.x'
 
     runs-on: ubuntu-latest
