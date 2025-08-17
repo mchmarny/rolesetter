@@ -66,6 +66,7 @@ jobs:
   integration:
     needs:
     - conf
+    - test
     - build
     permissions:
       contents: read
@@ -76,19 +77,6 @@ jobs:
       worker_node_count: ${{ needs.conf.outputs.worker_node_count }}
       k8s_version: ${{ needs.conf.outputs.k8s_version }}
       test_image: ${{ needs.build.outputs.digest }}
-
-  sign:
-    needs:
-    - conf
-    - build
-    permissions:
-      contents: read
-      actions: read
-      packages: write
-    uses: ./.github/workflows/sign.yaml
-    with:
-      cosign_version: ${{ needs.conf.outputs.cosign_version }}
-      image_digest: ${{ needs.build.outputs.digest }}
 
   scan:
     needs:
@@ -102,10 +90,28 @@ jobs:
       image_digest: ${{ needs.build.outputs.digest }}
       scan_severity: ${{ needs.conf.outputs.err_on_vulnerability_sev }}
 
+  sign:
+    needs:
+    - conf
+    - build
+    - integration
+    - scan
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    uses: ./.github/workflows/sign.yaml
+    with:
+      cosign_version: ${{ needs.conf.outputs.cosign_version }}
+      image_digest: ${{ needs.build.outputs.digest }}
+
+
   slsa:
     needs:
     - conf
     - build
+    - integration
+    - scan
     permissions:
       contents: read
       actions: read
