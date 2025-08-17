@@ -33,20 +33,22 @@ jobs:
     steps:
 
     # test the code
-    - uses: mchmarny/common/go-test@6111ea53d93d91abf1ee7c8d58a9710c3ce2c741
+    - uses: mchmarny/common/go-test@626cda6a48a0af2da26f21c3f7c06c12add33790
       with:
         go-version: ${{ env.GO_VERSION }}
         scan-severity: ${{ env.ERR_VULNERABILITY_SEV }}
         linter-version: ${{ env.GO_LINTER_VERSION }}
 
     # build the image
-    - uses: mchmarny/common/go-build@6111ea53d93d91abf1ee7c8d58a9710c3ce2c741
+    - uses: mchmarny/common/go-build@626cda6a48a0af2da26f21c3f7c06c12add33790
       id: build
       with:
         go-version: ${{ env.GO_VERSION }}
         image-uri: ${{ env.IMAGE_NAME }}
         release-version: ${{ github.ref_name }}
         main-path: main.go
+        registry-username: ${{ github.actor }}
+        registry-password: ${{ secrets.GITHUB_TOKEN }}
 
     # runt integration tests with kind
     - uses: chainguard-dev/actions/setup-kind@b1933e3d1f574c772dc7efd68c2060dafbc25e8c  # v1.4.9
@@ -58,7 +60,7 @@ jobs:
     - run: tests/integration "${{ env.WORKER_NODE_COUNT }}"
 
     # scan the image for vulnerabilities
-    - uses: mchmarny/common/image-scan@6111ea53d93d91abf1ee7c8d58a9710c3ce2c741
+    - uses: mchmarny/common/image-scan@626cda6a48a0af2da26f21c3f7c06c12add33790
       with:
         image-uri: ${{ steps.build.outputs.image-uri }}
         scan-severity: ${{ env.ERR_VULNERABILITY_SEV }}
