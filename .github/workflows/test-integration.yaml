@@ -25,12 +25,11 @@ on:
 
 permissions:
   contents: read
+  packages: read
 jobs:
 
   integration:
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
     steps:
 
     - uses: chainguard-dev/actions/setup-kind@b1933e3d1f574c772dc7efd68c2060dafbc25e8c  # v1.4.9
