@@ -30,6 +30,7 @@ jobs:
       contents: read
       security-events: write
       id-token: write
+      packages: write
     steps:
 
     # build the image

@@ -1,5 +1,5 @@
 APP_NAME           := node-role-controller
-APP_VERSION 	   := v0.4.14
+APP_VERSION 	   := v0.4.15
 YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
 NODE_IMAGE         ?= kindest/node:v1.33.1
 
