@@ -26,10 +26,8 @@ jobs:
       security-events: write
       id-token: write
     steps:
-    - uses: mchmarny/common/go-test@c15cbf5f52f61b79f4d13ddece1d856471bfdf5c
+    - uses: mchmarny/common/go-test@743e9bd3a364a9ec749fe91c8728f6696b239245
       with:
         go-version: ${{ env.GO_VERSION }}
         scan-severity: ${{ env.ERR_VULNERABILITY_SEV }}
         linter-version: ${{ env.LINTER_VERSION }}
-        yaml-linter-config-path: ${{ env.LINTER_YAML_CONFIG_PATH }}
-        go-linter-config-path: ${{ env.LINTER_GO_CONFIG_PATH }}
