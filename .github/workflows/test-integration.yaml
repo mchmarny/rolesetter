@@ -11,8 +11,8 @@ on:
       worker_node_count:
         description: 'Number of worker nodes to create'
         required: false
-        type: number
-        default: 2
+        type: string
+        default: '2'
       k8s_version:
         description: 'Kubernetes version to use for the Kind cluster'
         required: false

@@ -76,7 +76,7 @@ jobs:
     uses: ./.github/workflows/test-integration.yaml
     with:
       kind_version: ${{ needs.conf.outputs.kind_version }}
-      worker_node_count: ${{ needs.conf.outputs.worker_node_count }}
+      worker_node_count: "${{ needs.conf.outputs.worker_node_count }}"
       k8s_version: ${{ needs.conf.outputs.k8s_version }}
       test_image: ${{ needs.build.outputs.digest }}
 
