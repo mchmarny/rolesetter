@@ -32,15 +32,8 @@ jobs:
       id-token: write
     steps:
 
-    # test the code
-    - uses: mchmarny/common/go-test@af0d47c1afa3547e2ff8a4a25ec05d3b3d0f9ee6
-      with:
-        go-version: ${{ env.GO_VERSION }}
-        scan-severity: ${{ env.ERR_VULNERABILITY_SEV }}
-        linter-version: ${{ env.GO_LINTER_VERSION }}
-
     # build the image
-    - uses: mchmarny/common/go-build@af0d47c1afa3547e2ff8a4a25ec05d3b3d0f9ee6
+    - uses: mchmarny/common/go-build@main
       id: build
       with:
         go-version: ${{ env.GO_VERSION }}
