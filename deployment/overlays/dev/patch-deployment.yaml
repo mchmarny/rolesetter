@@ -4,9 +4,9 @@ metadata:
   name: node-role-controller
   namespace: node-labeler
 spec:
-  replicas: 2
+  replicas: 1
   template:
     spec:
       containers:
         - name: node-role-controller
-          image: ghcr.io/mchmarny/node-role-controller:v0.3.4@sha256:d5f82283cfb092ba1cbb893b53472fa6e019f0fd651cbe964036ecb770044195
+          image: ghcr.io/mchmarny/node-role-controller:latest

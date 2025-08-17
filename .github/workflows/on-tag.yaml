@@ -15,6 +15,9 @@ jobs:
       GO_VERSION: '1.25.0'
       COSIGN_VERSION: v2.5.0
       ERR_VULNERABILITY_SEV: 'CRITICAL,HIGH,MEDIUM'
+      KIND_VERSION: '0.29.0'
+      WORKER_NODE_COUNT: 2
+      K8S_VERSION: '1.33.x'
 
     runs-on: ubuntu-latest
     permissions:
@@ -32,6 +35,9 @@ jobs:
         echo "go_version=${{ env.GO_VERSION }}" >> $GITHUB_OUTPUT
         echo "cosign_version=${{ env.COSIGN_VERSION }}" >> $GITHUB_OUTPUT
         echo "err_on_vulnerability_sev=${{ env.ERR_VULNERABILITY_SEV }}" >> $GITHUB_OUTPUT
+        echo "kind_version=${{ env.KIND_VERSION }}" >> $GITHUB_OUTPUT
+        echo "worker_node_count=${{ env.WORKER_NODE_COUNT }}" >> $GITHUB_OUTPUT
+        echo "k8s_version=${{ env.K8S_VERSION }}" >> $GITHUB_OUTPUT
 
   test:
     needs:
@@ -56,6 +62,20 @@ jobs:
     with:
       go_version: ${{ needs.conf.outputs.go_version }}
       image_name: ${{ needs.conf.outputs.image_name }}
+
+  integration:
+    needs:
+    - conf
+    - build
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/test-integration.yaml
+    with:
+      kind_version: ${{ needs.conf.outputs.kind_version }}
+      worker_node_count: ${{ needs.conf.outputs.worker_node_count }}
+      k8s_version: ${{ needs.conf.outputs.k8s_version }}
+      test_image: ${{ needs.build.outputs.digest }}
 
   sign:
     needs:

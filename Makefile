@@ -1,5 +1,5 @@
 APP_NAME           := node-role-controller
-APP_VERSION 	   := v0.3.5
+APP_VERSION 	   := v0.4.0
 YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
 NODE_IMAGE         ?= kindest/node:v1.33.1
 
@@ -52,10 +52,14 @@ tag: ## Creates a release tag
 	git push origin $(APP_VERSION)
 
 up: ## Create a Kubernetes cluster with KinD
-	kind create cluster --name $(APP_NAME) --image $(NODE_IMAGE) --config $(CONFIG_FILE) --wait 5m
+	kind create cluster --name $(APP_NAME) --config $(CONFIG_FILE) --wait 5m
 
 down: ## Delete a Kubernetes cluster with KinD
 	kind delete cluster --name $(APP_NAME)
+
+integration: ## Run integration tests
+	@echo "Running integration tests..."; \
+	bash tests/integration 2 || exit 1;
 
 help: ## Displays available commands
 	@echo "Available make targets:"; \

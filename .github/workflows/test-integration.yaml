@@ -1,0 +1,44 @@
+name: integration
+
+on:
+  workflow_call:
+    inputs:
+      kind_version:
+        description: 'Version of Kind to use'
+        required: false
+        type: string
+        default: '0.29.0'
+      worker_node_count:
+        description: 'Number of worker nodes to create'
+        required: false
+        type: number
+        default: 2
+      k8s_version:
+        description: 'Kubernetes version to use for the Kind cluster'
+        required: false
+        type: string
+        default: '1.33.x'
+      test_image:
+        description: 'Image to test'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+jobs:
+
+  integration:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+
+    - uses: chainguard-dev/actions/setup-kind@b1933e3d1f574c772dc7efd68c2060dafbc25e8c  # v1.4.9
+      with:
+        kind-version: ${{ inputs.kind_version }}
+        k8s-version: ${{ inputs.k8s_version }}
+        kind-worker-count: ${{ inputs.worker_node_count }}
+    - run: kubectl version --client
+    - run: kind --version
+    - run: tests/set-dev-image ${{ inputs.test_image }}
+    - run: tests/integration ${{ inputs.worker_node_count }}
