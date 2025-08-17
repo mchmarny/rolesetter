@@ -11,7 +11,7 @@ jobs:
 
   release:
     env:
-      IMG_NAME: node-role-controller
+      IMAGE_NAME: node-role-controller
       GO_VERSION: '1.25.0'
       COSIGN_VERSION: v2.5.0
       KIND_VERSION: '0.29.0'
@@ -20,7 +20,11 @@ jobs:
       ERR_VULNERABILITY_SEV: 'CRITICAL,HIGH,MEDIUM'
       DEPLOYMENT_PATCH_FILE: deployment/overlays/dev/patch-deployment.yaml
       WORKER_NODE_COUNT: '2'
-
+    outputs:
+      image-uti: ${{ steps.build.outputs.image-uri }}
+      image-name: ${{ steps.build.outputs.image-name }}
+      image-digest: ${{ steps.build.outputs.image-digest }}
+      cosign-version: ${{ env.COSIGN_VERSION }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -28,19 +32,19 @@ jobs:
       id-token: write
     steps:
 
-    # checkout the code
-    - uses: mchmarny/common/go-test@743e9bd3a364a9ec749fe91c8728f6696b239245
+    # test the code
+    - uses: mchmarny/common/go-test@d7ce80f66d2435579e3b0f3ca77cf76d5bff5e1c
       with:
         go-version: ${{ env.GO_VERSION }}
         scan-severity: ${{ env.ERR_VULNERABILITY_SEV }}
         linter-version: ${{ env.GO_LINTER_VERSION }}
 
     # build the image
-    - uses: mchmarny/common/go-build@743e9bd3a364a9ec749fe91c8728f6696b239245
+    - uses: mchmarny/common/go-build@d7ce80f66d2435579e3b0f3ca77cf76d5bff5e1c
       id: build
       with:
         go-version: ${{ env.GO_VERSION }}
-        image-uri: ${{ env.IMG_NAME }}
+        image-uri: ${{ env.IMAGE_NAME }}
         release-version: ${{ github.ref_name }}
         main-path: main.go
 
@@ -49,26 +53,65 @@ jobs:
       with:
         kind-version: ${{ env.KIND_VERSION }}
         k8s-version: ${{ env.K8S_VERSION }}
-        kind-worker-count: ${{ env.WORKER_NODE_COUNT }}
-    - run: tests/set-dev-image ${{ steps.build.outputs.digest }} ${{ env.DEPLOYMENT_PATCH_FILE }}
-    - run: tests/integration ${{ env.WORKER_NODE_COUNT }}
+        kind-worker-count: "${{ env.WORKER_NODE_COUNT }}"
+    - run: tests/set-dev-image ${{ steps.build.outputs.image-uri }} ${{ env.DEPLOYMENT_PATCH_FILE }}
+    - run: tests/integration "${{ env.WORKER_NODE_COUNT }}"
 
     # scan the image for vulnerabilities
-    - uses: mchmarny/common/image-scan@743e9bd3a364a9ec749fe91c8728f6696b239245
+    - uses: mchmarny/common/image-scan@d7ce80f66d2435579e3b0f3ca77cf76d5bff5e1c
       with:
-        image-uri: ${{ steps.build.outputs.digest }}
+        image-uri: ${{ steps.build.outputs.image-uri }}
         scan-severity: ${{ env.ERR_VULNERABILITY_SEV }}
 
-    # sign the image with cosign
-    - uses: mchmarny/common/image-sign@743e9bd3a364a9ec749fe91c8728f6696b239245
-      with:
-        image-uri: ${{ steps.build.outputs.digest }}
-        image-tag: ${{ github.ref_name }}
-        cosign-version: ${{ env.COSIGN_VERSION }}
-        keyless-signing: true
+  provenance:
+    needs: [release]
+    permissions:
+      actions: read
+      id-token: write
+      packages: write
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    with:
+      image: ${{ needs.release.outputs.image-name }}
+      digest: ${{ needs.release.outputs.image-digest }}
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
 
-    # attest the image
-    - uses: mchmarny/common/image-attest@743e9bd3a364a9ec749fe91c8728f6696b239245
+  verification:
+    needs: [release, provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159  # v3.9.2
       with:
-        image-uri: ${{ steps.build.outputs.digest }}
-        cosign-version: ${{ env.COSIGN_VERSION }}
+        cosign-release: ${{ needs.release.outputs.cosign-version }}
+
+    - name: Auth Cosign
+      shell: bash
+      run: |
+        cosign login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Verify SLSA Provenance (cosign)
+      shell: bash
+      run: |
+        cosign verify-attestation \
+          --type slsaprovenance \
+          --certificate-identity-regexp \
+            "^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v[0-9]+.[0-9]+.[0-9]+$" \
+          --certificate-oidc-issuer \
+            https://token.actions.githubusercontent.com \
+          --policy policy/provenance.cue \
+          ${{ needs.release.outputs.image-uti }}
+
+    - uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6  # v2.7.1
+
+    - name: Verify SLSA Provenance (slsa-verifier)
+      shell: bash
+      run: |-
+        slsa-verifier verify-image ${{ needs.release.outputs.image-uti }} \
+          --source-uri "github.com/$GITHUB_REPOSITORY" \
+          --source-tag "$GITHUB_REF_NAME"
