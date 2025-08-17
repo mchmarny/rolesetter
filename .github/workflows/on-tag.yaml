@@ -33,14 +33,14 @@ jobs:
     steps:
 
     # test the code
-    - uses: mchmarny/common/go-test@d7ce80f66d2435579e3b0f3ca77cf76d5bff5e1c
+    - uses: mchmarny/common/go-test@6111ea53d93d91abf1ee7c8d58a9710c3ce2c741
       with:
         go-version: ${{ env.GO_VERSION }}
         scan-severity: ${{ env.ERR_VULNERABILITY_SEV }}
         linter-version: ${{ env.GO_LINTER_VERSION }}
 
     # build the image
-    - uses: mchmarny/common/go-build@d7ce80f66d2435579e3b0f3ca77cf76d5bff5e1c
+    - uses: mchmarny/common/go-build@6111ea53d93d91abf1ee7c8d58a9710c3ce2c741
       id: build
       with:
         go-version: ${{ env.GO_VERSION }}
@@ -58,7 +58,7 @@ jobs:
     - run: tests/integration "${{ env.WORKER_NODE_COUNT }}"
 
     # scan the image for vulnerabilities
-    - uses: mchmarny/common/image-scan@d7ce80f66d2435579e3b0f3ca77cf76d5bff5e1c
+    - uses: mchmarny/common/image-scan@6111ea53d93d91abf1ee7c8d58a9710c3ce2c741
       with:
         image-uri: ${{ steps.build.outputs.image-uri }}
         scan-severity: ${{ env.ERR_VULNERABILITY_SEV }}
