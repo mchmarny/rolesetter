@@ -22,6 +22,11 @@ on:
         description: 'Image to test'
         required: true
         type: string
+      deployment_patch_file:
+        description: 'Path to the deployment patch file'
+        required: false
+        type: string
+        default: 'deployment/overlays/dev/patch-deployment.yaml'
 
 permissions:
   contents: read
@@ -40,5 +45,5 @@ jobs:
         kind-worker-count: ${{ inputs.worker_node_count }}
     - run: kubectl version --client
     - run: kind --version
-    - run: tests/set-dev-image ${{ inputs.test_image }}
+    - run: tests/set-dev-image ${{ inputs.test_image }} ${{ inputs.deployment_patch_file }}
     - run: tests/integration ${{ inputs.worker_node_count }}
