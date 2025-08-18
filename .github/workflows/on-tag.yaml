@@ -40,6 +40,7 @@ jobs:
       id: build
       with:
         image-uri: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+        go-version: ${{ env.GO_VERSION }}
         release-version: ${{ github.ref_name }}
         registry-username: ${{ github.actor }}
         registry-password: ${{ secrets.GITHUB_TOKEN }}

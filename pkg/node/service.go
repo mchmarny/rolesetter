@@ -31,7 +31,7 @@ func InformNodeRoles() {
 	// Read environment variables for role label and server port
 	roleLabel := os.Getenv("ROLE_LABEL")
 	if roleLabel == "" {
-		logger.Fatal("ROLE_LABEL environment variable is not set")
+		logger.Fatal("environment variable ROLE_LABEL is not set")
 	}
 
 	serverPort := os.Getenv("SERVER_PORT")
