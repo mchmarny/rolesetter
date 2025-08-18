@@ -61,7 +61,7 @@ The image produced by this repo comes with SLSA attestation which verifies that 
 > Update the image digest to the version you end up using.
 
 ```shell
-export IMAGE=ghcr.io/mchmarny/node-role-controller:v0.4.19@sha256:01b47e242f730e921e517764baa53d562be99251be554f9c645bb6feca2782e5
+export IMAGE=ghcr.io/mchmarny/node-role-controller:v0.5.0@sha256:345638126a65cff794a59c620badcd02cdbc100d45f7745b4b42e32a803ff645
 
 cosign verify-attestation \
     --output json \
