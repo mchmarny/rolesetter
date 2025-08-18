@@ -25,6 +25,8 @@ jobs:
       image-name: ${{ steps.build.outputs.image-name }}
       image-digest: ${{ steps.build.outputs.image-digest }}
       cosign-version: ${{ env.COSIGN_VERSION }}
+      source-uri: "github.com/${{ github.repository }}"
+      source-tag: ${{ github.ref_name }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -90,5 +92,5 @@ jobs:
       shell: bash
       run: |-
         slsa-verifier verify-image ${{ needs.release.outputs.image-uri }} \
-          --source-uri "github.com/${{ github.repository.name }}" \
-          --source-tag "${{ github.ref_name }}"
+          --source-uri "${{ needs.release.outputs.source-uri }}" \
+          --source-tag "${{ needs.release.outputs.source-tag }}"
