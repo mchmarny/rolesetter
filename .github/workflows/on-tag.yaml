@@ -21,7 +21,7 @@ jobs:
       DEPLOYMENT_PATCH_FILE: deployment/overlays/dev/patch-deployment.yaml
       WORKER_NODE_COUNT: '2'
     outputs:
-      image-uti: ${{ steps.build.outputs.image-uri }}
+      image-uri: ${{ steps.build.outputs.image-uri }}
       image-name: ${{ steps.build.outputs.image-name }}
       image-digest: ${{ steps.build.outputs.image-digest }}
       cosign-version: ${{ env.COSIGN_VERSION }}
@@ -37,8 +37,7 @@ jobs:
     - uses: mchmarny/common/go-build@main
       id: build
       with:
-        go-version: ${{ env.GO_VERSION }}
-        image-uri: ${{ env.IMAGE_NAME }}
+        image-uri: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
         release-version: ${{ github.ref_name }}
         registry-username: ${{ github.actor }}
         registry-password: ${{ secrets.GITHUB_TOKEN }}
@@ -90,6 +89,6 @@ jobs:
     - name: Verify SLSA Provenance (slsa-verifier)
       shell: bash
       run: |-
-        slsa-verifier verify-image ${{ needs.release.outputs.image-uti }} \
-          --source-uri "github.com/$GITHUB_REPOSITORY" \
-          --source-tag "$GITHUB_REF_NAME"
+        slsa-verifier verify-image ${{ needs.release.outputs.image-uri }} \
+          --source-uri "github.com/${{ github.repository.name }}" \
+          --source-tag "${{ github.ref_name }}"
