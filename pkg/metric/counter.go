@@ -8,31 +8,32 @@ import (
 )
 
 type IncrementalCounter interface {
-	Inc()
+	Increment(val ...string)
 }
 
 type Counter struct {
 	Name string
 	Help string
 
-	counter IncrementalCounter
+	vec *prometheus.CounterVec
 }
 
-func (c *Counter) Inc() {
-	c.counter.Inc()
+func (c *Counter) Increment(val ...string) {
+	c.vec.WithLabelValues(val...).Inc()
 }
-func NewCounter(name, help string) IncrementalCounter {
-	counter := prometheus.NewCounter(prometheus.CounterOpts{
+
+func NewCounter(name, help string, labels ...string) IncrementalCounter {
+	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: name,
 		Help: help,
-	})
+	}, labels)
 
 	prometheus.MustRegister(counter)
 
 	return &Counter{
-		Name:    name,
-		Help:    help,
-		counter: counter,
+		Name: name,
+		Help: help,
+		vec:  counter,
 	}
 }
 

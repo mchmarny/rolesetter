@@ -52,8 +52,8 @@ func (h *CacheResourceHandler) validate() error {
 }
 
 var (
-	successCounter = metric.NewCounter("node_role_patch_success_total", "Total number of successful node role patches")
-	failureCounter = metric.NewCounter("node_role_patch_failure_total", "Total number of failed node role patches")
+	successCounter = metric.NewCounter("node_role_patch_success_total", "Total number of successful node role patches", "role")
+	failureCounter = metric.NewCounter("node_role_patch_failure_total", "Total number of failed node role patches", "role")
 )
 
 // ensureRole checks if the Node has the correct role label and patches it if necessary.
@@ -136,7 +136,7 @@ func (h *CacheResourceHandler) EnsureRole(obj interface{}) {
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.MaxElapsedTime = 15 * time.Second // Limit total retry duration
 	if err := backoff.Retry(op, expBackoff); err != nil {
-		failureCounter.Inc()
+		failureCounter.Increment(val)
 		h.Logger.Error("patch node failed after backoff",
 			zap.String("node", n.Name),
 			zap.String("roleKey", roleKey),
@@ -146,7 +146,7 @@ func (h *CacheResourceHandler) EnsureRole(obj interface{}) {
 		return
 	}
 
-	successCounter.Inc()
+	successCounter.Increment(val)
 
 	h.Logger.Info("node role label patched successfully",
 		zap.String("node", n.Name),
