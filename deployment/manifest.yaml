@@ -99,7 +99,7 @@ items:
     uid: e27a2756-4611-4b72-af05-8991a3f60061
   spec:
     progressDeadlineSeconds: 600
-    replicas: 2
+    replicas: 1
     revisionHistoryLimit: 10
     selector:
       matchLabels:

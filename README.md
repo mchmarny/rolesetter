@@ -45,6 +45,20 @@ This will ensure all nodes with `nodeGroup=customer-gpu` are labeled with `node-
 
 > If you change ConfigMap value after the deployment remember to restart the deployment: `kubectl -n node-labeler rollout restart deployment node-role-controller`
 
+Alternately, you can apply the prebuilt manifest
+
+```shell
+kubectl apply -f https://raw.githubusercontent.com/mchmarny/rolesetter/refs/heads/main/deployment/manifest.yaml
+```
+
+This will: 
+* `Namespace` - Isolates the controller’s resources
+* `ServiceAccount` - Authenticates the controller
+* `ClusterRole` - Grants node update permissions
+* `ClusterRoleBinding` - Links the role to the ServiceAccount
+* `ConfigMap` - Defines label and logging configuration
+* `Deployment` - Runs 1 replica of the node-role controller
+
 ## Metrics
 
 The `node-role-controller` emits following metrics: 
