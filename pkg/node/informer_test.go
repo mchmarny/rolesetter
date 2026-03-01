@@ -11,7 +11,7 @@ import (
 
 func TestInformer_Validate(t *testing.T) {
 	logger := logger.GetTestLogger()
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	srv := server.NewServer(
 		server.WithLogger(logger),
 		server.WithPort(8080),
@@ -31,7 +31,7 @@ func TestInformer_Validate(t *testing.T) {
 
 func TestInformer_Inform_ContextCancel(t *testing.T) {
 	logger := logger.GetTestLogger()
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	srv := server.NewServer(
 		server.WithLogger(logger),
 		server.WithPort(8080),
@@ -117,7 +117,7 @@ func TestValidate_Errors(t *testing.T) {
 
 func TestNewInformer_Validation(t *testing.T) {
 	logger := logger.GetTestLogger()
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 
 	inf, err := NewInformer(
 		WithLogger(logger),
