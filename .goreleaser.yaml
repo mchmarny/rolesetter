@@ -5,7 +5,7 @@ project_name: node-role-controller
 builds:
   - id: node-role-controller
     binary: node-role-controller
-    main: main.go
+    main: .
     mod_timestamp: '{{ .CommitTimestamp }}'
     env:
       - CGO_ENABLED=0
