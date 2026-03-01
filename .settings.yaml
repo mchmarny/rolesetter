@@ -7,7 +7,7 @@ languages:
 
 # Linting
 linting:
-  golangci_lint: 'v2.4.0'
+  golangci_lint: 'v2.10.1'
   scan_severity: 'CRITICAL,HIGH,MEDIUM'
 
 # Build Configuration

@@ -114,7 +114,6 @@ jobs:
 
   provenance:
     needs: [release]
-    timeout-minutes: 15
     permissions:
       actions: read
       id-token: write
