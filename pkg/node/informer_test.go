@@ -4,13 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/mchmarny/rolesetter/pkg/log"
+	"github.com/mchmarny/rolesetter/pkg/logger"
 	"github.com/mchmarny/rolesetter/pkg/server"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestInformer_Validate(t *testing.T) {
-	logger := log.GetTestLogger()
+	logger := logger.GetTestLogger()
 	clientset := fake.NewSimpleClientset()
 	srv := server.NewServer(
 		server.WithLogger(logger),
@@ -30,7 +30,7 @@ func TestInformer_Validate(t *testing.T) {
 }
 
 func TestInformer_Inform_ContextCancel(t *testing.T) {
-	logger := log.GetTestLogger()
+	logger := logger.GetTestLogger()
 	clientset := fake.NewSimpleClientset()
 	srv := server.NewServer(
 		server.WithLogger(logger),
@@ -61,7 +61,7 @@ func TestWithReplace_SetsReplace(t *testing.T) {
 }
 
 func TestWithLogger_SetsLogger(t *testing.T) {
-	l := log.GetTestLogger()
+	l := logger.GetTestLogger()
 	i := &Informer{}
 	WithLogger(l)(i)
 	if i.logger != l {
@@ -101,7 +101,7 @@ func TestValidate_Errors(t *testing.T) {
 	if err := i.validate(); err == nil {
 		t.Error("expected error for missing fields")
 	}
-	i.logger = log.GetTestLogger()
+	i.logger = logger.GetTestLogger()
 	if err := i.validate(); err == nil {
 		t.Error("expected error for missing label")
 	}
@@ -116,7 +116,7 @@ func TestValidate_Errors(t *testing.T) {
 }
 
 func TestNewInformer_Validation(t *testing.T) {
-	logger := log.GetTestLogger()
+	logger := logger.GetTestLogger()
 	clientset := fake.NewSimpleClientset()
 
 	inf, err := NewInformer(

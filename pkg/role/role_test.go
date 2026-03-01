@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mchmarny/rolesetter/pkg/log"
+	"github.com/mchmarny/rolesetter/pkg/logger"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +31,7 @@ func newTestPatcher(retNode *corev1.Node, retErr error) NodePatcher {
 }
 
 func TestNewCacheResourceHandler_Validation(t *testing.T) {
-	logger := log.GetTestLogger()
+	logger := logger.GetTestLogger()
 	patcher := newTestPatcher(nil, nil)
 
 	if _, err := NewCacheResourceHandler(nil, logger, "label", false); err == nil {
@@ -53,7 +53,7 @@ func TestNewCacheResourceHandler_Validation(t *testing.T) {
 }
 
 func TestEnsureRole_PatchVariants(t *testing.T) {
-	logger := log.GetTestLogger()
+	logger := logger.GetTestLogger()
 	val := "worker"
 
 	tests := []struct {
@@ -114,7 +114,7 @@ func TestEnsureRole_PatchVariants(t *testing.T) {
 }
 
 func TestEnsureRole_NonNodeObject(t *testing.T) {
-	logger := log.GetTestLogger()
+	logger := logger.GetTestLogger()
 	called := false
 	patcher := func(_ context.Context, _ string, _ types.PatchType, _ []byte, _ metav1.PatchOptions, _ ...string) (*corev1.Node, error) {
 		called = true
@@ -131,7 +131,7 @@ func TestEnsureRole_NonNodeObject(t *testing.T) {
 }
 
 func TestEnsureRole_ReplaceRemovesOldRoles(t *testing.T) {
-	logger := log.GetTestLogger()
+	logger := logger.GetTestLogger()
 	var gotPatchData []byte
 	patcher := func(_ context.Context, _ string, _ types.PatchType, data []byte, _ metav1.PatchOptions, _ ...string) (*corev1.Node, error) {
 		gotPatchData = data
@@ -168,7 +168,7 @@ func TestEnsureRole_ReplaceRemovesOldRoles(t *testing.T) {
 }
 
 func TestEnsureRole_ContextCancellation(t *testing.T) {
-	logger := log.GetTestLogger()
+	logger := logger.GetTestLogger()
 	callCount := 0
 	patcher := func(_ context.Context, _ string, _ types.PatchType, _ []byte, _ metav1.PatchOptions, _ ...string) (*corev1.Node, error) {
 		callCount++
