@@ -8,7 +8,7 @@ Rolesetter is a Kubernetes controller that automatically assigns `node-role.kube
 
 **How it works:** Watches nodes via informer → reads source label value (e.g., `nodeGroup=gpu-worker`) → patches node with `node-role.kubernetes.io/gpu-worker` label. Uses leader election when `NAMESPACE` is set.
 
-**Tech Stack:** Go 1.25, Kubernetes 1.33+, Ko for images, golangci-lint v2.4.0
+**Tech Stack:** Go 1.26, Kubernetes 1.33+, Ko for images, golangci-lint v2.4.0
 
 ## Commands
 

@@ -13,7 +13,27 @@ concurrency:
 
 jobs:
 
+  versions:
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      go: ${{ steps.v.outputs.go }}
+      scan_severity: ${{ steps.v.outputs.scan_severity }}
+      registry: ${{ steps.v.outputs.registry }}
+      kind_version: ${{ steps.v.outputs.kind_version }}
+      k8s_version: ${{ steps.v.outputs.k8s_version }}
+      worker_node_count: ${{ steps.v.outputs.worker_node_count }}
+      cosign: ${{ steps.v.outputs.cosign }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+    - name: Load versions
+      id: v
+      uses: ./.github/actions/load-versions
+
   release:
+    needs: [versions]
     timeout-minutes: 30
     env:
       IMAGE_NAME: node-role-controller
@@ -22,7 +42,7 @@ jobs:
       image-uri: ${{ steps.build.outputs.image-uri }}
       image-name: ${{ steps.build.outputs.image-name }}
       image-digest: ${{ steps.build.outputs.image-digest }}
-      cosign-version: ${{ steps.versions.outputs.cosign }}
+      cosign-version: ${{ needs.versions.outputs.cosign }}
       source-uri: "github.com/${{ github.repository }}"
       source-tag: ${{ github.ref_name }}
     runs-on: ubuntu-latest
@@ -33,17 +53,12 @@ jobs:
       packages: write
     steps:
 
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-    - name: Load versions
-      id: versions
-      uses: ./.github/actions/load-versions
-
     - name: Build Image
       uses: mchmarny/common/go-build@994d32fc6dcff3e6006a59db9d20b9e201423cb4  # main
       id: build
       with:
-        image-uri: ${{ steps.versions.outputs.registry }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-        go-version: ${{ steps.versions.outputs.go }}
+        image-uri: ${{ needs.versions.outputs.registry }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+        go-version: ${{ needs.versions.outputs.go }}
         release-version: ${{ github.ref_name }}
         registry-username: ${{ github.actor }}
         registry-password: ${{ secrets.GITHUB_TOKEN }}
@@ -51,19 +66,19 @@ jobs:
     - name: Setup KinD Cluster
       uses: chainguard-dev/actions/setup-kind@eab208ef2d05b13404296a5e194a6b237e8bb213  # v1.6.4
       with:
-        kind-version: ${{ steps.versions.outputs.kind_version }}
-        k8s-version: ${{ steps.versions.outputs.k8s_version }}
-        kind-worker-count: ${{ steps.versions.outputs.worker_node_count }}
+        kind-version: ${{ needs.versions.outputs.kind_version }}
+        k8s-version: ${{ needs.versions.outputs.k8s_version }}
+        kind-worker-count: ${{ needs.versions.outputs.worker_node_count }}
     - name: Set Dev Image
       run: tests/set-dev-image ${{ steps.build.outputs.image-uri }} ${{ env.DEPLOYMENT_PATCH_FILE }}
     - name: Run Integration Tests
-      run: tests/integration ${{ steps.versions.outputs.worker_node_count }}
+      run: tests/integration ${{ needs.versions.outputs.worker_node_count }}
 
     - name: Scan Image
       uses: aquasecurity/trivy-action@e368e328979b113139d6f9068e03accaed98a518  # 0.34.1
       with:
         scan-type: image
-        severity: ${{ steps.versions.outputs.scan_severity }}
+        severity: ${{ needs.versions.outputs.scan_severity }}
         image-ref: ${{ steps.build.outputs.image-uri }}
         github-pat: ${{ secrets.GITHUB_TOKEN }}
         format: sarif
