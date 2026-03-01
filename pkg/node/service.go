@@ -8,13 +8,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/mchmarny/rolesetter/pkg/log"
+	"github.com/mchmarny/rolesetter/pkg/logger"
 	"go.uber.org/zap"
 )
 
 // InformNodeRoles initializes and starts the node role setter informer.
 func InformNodeRoles() {
-	logger := log.GetLogger()
+	logger := logger.GetLogger()
 	defer func() { _ = logger.Sync() }()
 
 	ctx, cancel := context.WithCancel(context.Background())

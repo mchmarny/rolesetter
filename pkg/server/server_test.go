@@ -5,11 +5,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mchmarny/rolesetter/pkg/log"
+	"github.com/mchmarny/rolesetter/pkg/logger"
 )
 
 func TestBuildHandler_HealthAndReadyEndpoints(t *testing.T) {
-	logger := log.GetTestLogger()
+	logger := logger.GetTestLogger()
 	srv := &server{logger: logger, port: 8080}
 	handler := srv.buildHandler(nil)
 	ts := httptest.NewServer(handler)
@@ -29,7 +29,7 @@ func TestBuildHandler_HealthAndReadyEndpoints(t *testing.T) {
 }
 
 func TestBuildHandler_RegistersMetricsHandler(t *testing.T) {
-	logger := log.GetTestLogger()
+	logger := logger.GetTestLogger()
 	srv := &server{logger: logger, port: 8080}
 	metricsCalled := false
 	metricsHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -56,7 +56,7 @@ func TestBuildHandler_RegistersMetricsHandler(t *testing.T) {
 
 func TestWithLogger_SetsLogger(t *testing.T) {
 	s := &server{}
-	l := log.GetTestLogger()
+	l := logger.GetTestLogger()
 	WithLogger(l)(s)
 	if s.logger != l {
 		t.Error("WithLogger did not set logger")
@@ -76,7 +76,7 @@ func TestNewServer_DefaultsAndOptions(t *testing.T) {
 	if s == nil {
 		t.Error("NewServer returned nil")
 	}
-	custom := NewServer(WithLogger(log.GetTestLogger()), WithPort(4321))
+	custom := NewServer(WithLogger(logger.GetTestLogger()), WithPort(4321))
 	// Type assertion to access fields
 	impl, ok := custom.(*server)
 	if !ok {

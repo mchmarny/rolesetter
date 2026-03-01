@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mchmarny/rolesetter/pkg/log"
+	"github.com/mchmarny/rolesetter/pkg/logger"
 	"github.com/mchmarny/rolesetter/pkg/metric"
 	"github.com/mchmarny/rolesetter/pkg/role"
 	"github.com/mchmarny/rolesetter/pkg/server"
@@ -89,7 +89,7 @@ func WithNamespace(ns string) Option {
 // NewInformer creates a new Informer instance using functional options.
 func NewInformer(opts ...Option) (*Informer, error) {
 	i := &Informer{
-		logger: log.GetLogger(),
+		logger: logger.GetLogger(),
 		port:   servicePortDefault,
 	}
 

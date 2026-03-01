@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/mchmarny/rolesetter/pkg/log"
+	"github.com/mchmarny/rolesetter/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -35,7 +35,7 @@ func WithPort(port int) Option {
 // NewServer creates a new Server instance with the provided options.
 func NewServer(opts ...Option) Server {
 	s := &server{
-		logger: log.GetLogger(), // default logger
+		logger: logger.GetLogger(), // default logger
 		port:   8080,
 	}
 
