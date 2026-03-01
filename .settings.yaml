@@ -5,10 +5,14 @@
 languages:
   go: '1.26.0'
 
+# Security Scanning
+scanning:
+  trivy: '0.69.1'
+  scan_severity: 'CRITICAL,HIGH,MEDIUM'
+
 # Linting
 linting:
   golangci_lint: 'v2.10.1'
-  scan_severity: 'CRITICAL,HIGH,MEDIUM'
 
 # Build Configuration
 build:

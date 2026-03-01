@@ -23,6 +23,9 @@ outputs:
   worker_node_count:
     description: 'Number of KinD worker nodes'
     value: ${{ steps.versions.outputs.worker_node_count }}
+  trivy:
+    description: 'Trivy version'
+    value: ${{ steps.versions.outputs.trivy }}
   cosign:
     description: 'Cosign version'
     value: ${{ steps.versions.outputs.cosign }}
@@ -39,9 +42,12 @@ runs:
         # Languages
         echo "go=$(yq eval '.languages.go' .settings.yaml)" >> $GITHUB_OUTPUT
 
+        # Scanning
+        echo "trivy=$(yq eval '.scanning.trivy' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "scan_severity=$(yq eval '.scanning.scan_severity' .settings.yaml)" >> $GITHUB_OUTPUT
+
         # Linting
         echo "golangci_lint=$(yq eval '.linting.golangci_lint' .settings.yaml)" >> $GITHUB_OUTPUT
-        echo "scan_severity=$(yq eval '.linting.scan_severity' .settings.yaml)" >> $GITHUB_OUTPUT
 
         # Build
         echo "registry=$(yq eval '.build.registry' .settings.yaml)" >> $GITHUB_OUTPUT
