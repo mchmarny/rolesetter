@@ -7,12 +7,19 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+const (
+	clientQPS   = 10
+	clientBurst = 20
+)
+
 // newClient creates a Kubernetes clientset for interacting with the cluster.
 func newClient() (kubernetes.Interface, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cluster config: %w", err)
 	}
+	cfg.QPS = clientQPS
+	cfg.Burst = clientBurst
 	cs, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create clientset: %w", err)

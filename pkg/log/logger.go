@@ -1,6 +1,7 @@
 package log
 
 import (
+	"fmt"
 	"os"
 
 	"go.uber.org/zap"
@@ -26,13 +27,19 @@ func GetLogger() *zap.Logger {
 	}
 	cfg := zap.NewProductionConfig()
 	cfg.Level = zap.NewAtomicLevelAt(zapLevel)
-	logger, _ := cfg.Build()
+	logger, err := cfg.Build()
+	if err != nil {
+		panic(fmt.Sprintf("failed to build logger: %v", err))
+	}
 	return logger
 }
 
 func GetDebugLogger() *zap.Logger {
 	cfg := zap.NewDevelopmentConfig()
-	logger, _ := cfg.Build()
+	logger, err := cfg.Build()
+	if err != nil {
+		panic(fmt.Sprintf("failed to build debug logger: %v", err))
+	}
 	return logger
 }
 

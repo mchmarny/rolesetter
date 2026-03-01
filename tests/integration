@@ -10,17 +10,37 @@ if ! command -v kubectl &>/dev/null; then
   exit 1
 fi
 
+# wait_for_label polls until at least $2 nodes have label $1, or times out.
+wait_for_label() {
+  local label=$1
+  local expected=$2
+  local timeout=${3:-60}
+  local elapsed=0
+
+  while [ $elapsed -lt $timeout ]; do
+    count=$(kubectl get nodes -l "$label" -o name 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$count" -ge "$expected" ]; then
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  echo "Timed out waiting for $expected nodes with label $label (found $count after ${timeout}s)"
+  return 1
+}
+
 # Wait for nodes to be ready
 kubectl wait --for=condition=Ready node --all --timeout=120s
 
-# Add labels to all nodes without node rol 
+# Add labels to all nodes without node role
 kubectl get nodes -l '!node-role.kubernetes.io/control-plane' -o name | \
   xargs -I {} kubectl label {} nodeGroup=worker --overwrite
 
 # Apply dev deployment
 kubectl apply -k deployment/overlays/dev
 
-# Print out the image that was deployed 
+# Print out the image that was deployed
 IMAGE=$(kubectl get deployment/node-role-controller \
   -n node-labeler \
   -o jsonpath='{.spec.template.spec.containers[0].image}')
@@ -29,8 +49,8 @@ echo "Deployed image: $IMAGE"
 # Wait for deployment pod to be running
 kubectl rollout status deployment/node-role-controller -n node-labeler --timeout=120s
 
-# Wait for controller to update node role
-sleep 3
+# Wait for controller to assign worker role labels
+wait_for_label 'node-role.kubernetes.io/worker' "$WORKER_NODES" 60
 
 # Get all nodes based on role
 worker_nodes=$(kubectl get nodes -l 'node-role.kubernetes.io/worker' -o name)
@@ -46,21 +66,19 @@ fi
 first_node=$(echo $worker_nodes | awk '{print $1}')
 kubectl label "$first_node" nodeGroup=test --overwrite
 
-# Wait for controller to update node role
-sleep 5
-
-# Check that node role label changed to 'test'
-test_nodes=$(kubectl get nodes -l 'node-role.kubernetes.io/test' -o name)
+# Wait for controller to assign test role label
+wait_for_label 'node-role.kubernetes.io/test' 1 60
 
 # Check if the first node has the 'test' role label
+test_nodes=$(kubectl get nodes -l 'node-role.kubernetes.io/test' -o name)
 if [[ -z "$test_nodes" ]]; then
-  echo "No nodes found with role 'test'."   
+  echo "No nodes found with role 'test'."
   exit 1
 fi
 
 # Update configmap to disable replace behavior
 kubectl patch cm node-role-controller-config -n node-labeler --type='json' \
-  -p='[{"op": "replace", "path": "/data/roleReplace", "value": "false"}]'  
+  -p='[{"op": "replace", "path": "/data/roleReplace", "value": "false"}]'
 
 # Restart the deployment to apply config changes
 kubectl rollout restart deployment/node-role-controller -n node-labeler
@@ -68,15 +86,15 @@ kubectl rollout restart deployment/node-role-controller -n node-labeler
 # Wait for deployment pod to be running
 kubectl rollout status deployment/node-role-controller -n node-labeler --timeout=120s
 
-# Wait for controller to update node role
-sleep 3
-
 # Update node role label to 'builder'
 kubectl label "$first_node" nodeGroup=builder --overwrite
 
+# Wait for builder role to appear
+wait_for_label 'node-role.kubernetes.io/builder' 1 60
+
 # Check for presence of both 'test' and 'builder' roles
 test_nodes=$(kubectl get nodes -l 'node-role.kubernetes.io/test' -o name)
-builder_nodes=$(kubectl get nodes -l 'node-role.kubernetes.io/builder' -o name) 
+builder_nodes=$(kubectl get nodes -l 'node-role.kubernetes.io/builder' -o name)
 if [[ -z "$test_nodes" || -z "$builder_nodes" ]]; then
   echo "Expected nodes with roles 'test' and 'builder', but found:"
   echo "Test nodes: $test_nodes"

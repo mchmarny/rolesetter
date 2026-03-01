@@ -42,6 +42,8 @@ func InformNodeRoles() {
 	roleLabelReplace := strings.TrimSpace(strings.ToLower(os.Getenv("ROLE_LABEL_REPLACE")))
 	replace := roleLabelReplace == "true" || roleLabelReplace == "1" || roleLabelReplace == "yes"
 
+	namespace := os.Getenv("NAMESPACE")
+
 	// parse integer port
 	port, err := strconv.Atoi(serverPort)
 	if err != nil || port <= 0 {
@@ -49,12 +51,17 @@ func InformNodeRoles() {
 	}
 
 	// Create a new informer instance
-	inf, err := NewInformer(
+	opts := []Option{
 		WithLogger(logger),
 		WithLabel(roleLabel),
 		WithPort(port),
 		WithReplace(replace),
-	)
+	}
+	if namespace != "" {
+		opts = append(opts, WithNamespace(namespace))
+	}
+
+	inf, err := NewInformer(opts...)
 	if err != nil {
 		logger.Fatal("failed to create informer", zap.Error(err))
 	}

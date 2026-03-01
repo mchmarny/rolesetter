@@ -1,6 +1,7 @@
 package metric
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -28,7 +29,14 @@ func NewCounter(name, help string, labels ...string) IncrementalCounter {
 		Help: help,
 	}, labels)
 
-	prometheus.MustRegister(counter)
+	if err := prometheus.Register(counter); err != nil {
+		var are prometheus.AlreadyRegisteredError
+		if errors.As(err, &are) {
+			counter = are.ExistingCollector.(*prometheus.CounterVec)
+		} else {
+			panic("failed to register counter " + name + ": " + err.Error())
+		}
+	}
 
 	return &Counter{
 		Name: name,

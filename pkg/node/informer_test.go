@@ -87,6 +87,15 @@ func TestWithPort_SetsPort(t *testing.T) {
 	}
 }
 
+func TestWithNamespace_SetsNamespace(t *testing.T) {
+	ns := "test-ns"
+	i := &Informer{}
+	WithNamespace(ns)(i)
+	if i.namespace != ns {
+		t.Error("WithNamespace did not set namespace")
+	}
+}
+
 func TestValidate_Errors(t *testing.T) {
 	i := &Informer{}
 	if err := i.validate(); err == nil {
@@ -103,5 +112,33 @@ func TestValidate_Errors(t *testing.T) {
 	i.port = 1234
 	if err := i.validate(); err == nil {
 		t.Error("expected error for missing clientset")
+	}
+}
+
+func TestNewInformer_Validation(t *testing.T) {
+	logger := log.GetTestLogger()
+	clientset := fake.NewSimpleClientset()
+
+	inf, err := NewInformer(
+		WithLogger(logger),
+		WithLabel("test-label"),
+		WithPort(8080),
+		WithClientset(clientset),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if inf == nil {
+		t.Fatal("expected non-nil informer")
+	}
+
+	// Missing label should fail validation
+	_, err = NewInformer(
+		WithLogger(logger),
+		WithPort(8080),
+		WithClientset(clientset),
+	)
+	if err == nil {
+		t.Error("expected error for missing label")
 	}
 }
