@@ -13,36 +13,15 @@ concurrency:
 
 jobs:
 
-  versions:
-    timeout-minutes: 5
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      go: ${{ steps.v.outputs.go }}
-      scan_severity: ${{ steps.v.outputs.scan_severity }}
-      registry: ${{ steps.v.outputs.registry }}
-      kind_version: ${{ steps.v.outputs.kind_version }}
-      k8s_version: ${{ steps.v.outputs.k8s_version }}
-      worker_node_count: ${{ steps.v.outputs.worker_node_count }}
-      cosign: ${{ steps.v.outputs.cosign }}
-    steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-    - name: Load versions
-      id: v
-      uses: ./.github/actions/load-versions
-
   release:
-    needs: [versions]
     timeout-minutes: 30
     env:
       IMAGE_NAME: node-role-controller
       DEPLOYMENT_PATCH_FILE: deployment/overlays/dev/patch-deployment.yaml
     outputs:
-      image-uri: ${{ steps.build.outputs.image-uri }}
-      image-name: ${{ steps.build.outputs.image-name }}
-      image-digest: ${{ steps.build.outputs.image-digest }}
-      cosign-version: ${{ needs.versions.outputs.cosign }}
+      image-uri: ${{ steps.image.outputs.uri }}
+      image-name: ${{ steps.image.outputs.name }}
+      image-digest: ${{ steps.image.outputs.digest }}
       source-uri: "github.com/${{ github.repository }}"
       source-tag: ${{ github.ref_name }}
     runs-on: ubuntu-latest
@@ -51,41 +30,103 @@ jobs:
       security-events: write
       id-token: write
       packages: write
+      attestations: write
     steps:
 
-    - name: Build Image
-      uses: mchmarny/common/go-build@eba3b1848a7cacb533285a15b01509d020513f25  # main
-      id: build
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    - name: Load versions
+      id: versions
+      uses: ./.github/actions/load-versions
+
+    - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00  # v6.0.0
       with:
-        image-uri: ${{ needs.versions.outputs.registry }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-        go-version: ${{ needs.versions.outputs.go }}
-        release-version: ${{ github.ref_name }}
-        registry-username: ${{ github.actor }}
-        registry-password: ${{ secrets.GITHUB_TOKEN }}
+        go-version: ${{ steps.versions.outputs.go }}
+        cache: true
+        cache-dependency-path: go.sum
+
+    - name: Tidy
+      run: go mod tidy
+
+    - name: Test
+      run: go test -count=1 -covermode=atomic -coverprofile=coverage.out ./...
+
+    - uses: ko-build/setup-ko@d006021bd0c28d1ce33a07e7943d48b079944c8d  # v0.9
+    - uses: imjasonh/setup-crane@31b88efe9de28ae0ffa220711af4b60be9435f6e  # v0.4
+    - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62  # v3.10.0
+
+    - name: Authenticate
+      run: |
+        echo ${{ secrets.GITHUB_TOKEN }} | ko login ghcr.io -u ${{ github.actor }} --password-stdin
+        echo ${{ secrets.GITHUB_TOKEN }} | crane auth login ghcr.io -u ${{ github.actor }} --password-stdin
+        echo ${{ secrets.GITHUB_TOKEN }} | cosign login ghcr.io -u ${{ github.actor }} --password-stdin
+
+    - name: Build Image
+      id: image
+      env:
+        KO_DOCKER_REPO: ${{ steps.versions.outputs.registry }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+        KO_DEFAULTBASEIMAGE: cgr.dev/chainguard/static:latest
+      run: |
+        set -euo pipefail
+        ko build main.go \
+          --platform linux/amd64,linux/arm64 \
+          --image-refs .refs \
+          --bare \
+          --tags latest \
+          --tags ${{ github.ref_name }}
+        cat .refs
+        DIGEST="$(crane digest ${KO_DOCKER_REPO}:${{ github.ref_name }})"
+        echo "uri=${KO_DOCKER_REPO}:${{ github.ref_name }}@${DIGEST}" >> "$GITHUB_OUTPUT"
+        echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+        echo "name=${KO_DOCKER_REPO}" >> "$GITHUB_OUTPUT"
+
+    - name: Attest
+      uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a  # v3.0.0
+      with:
+        subject-name: ${{ steps.image.outputs.name }}
+        subject-digest: ${{ steps.image.outputs.digest }}
+        push-to-registry: true
+
+    - name: Publish Attestation
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        IMAGE: "${{ steps.image.outputs.name }}@${{ steps.image.outputs.digest }}"
+        BUNDLE: "${{ steps.image.outputs.digest }}.jsonl"
+        COSIGN_EXPERIMENTAL: "1"
+        ATTEST_TYPE: "https://slsa.dev/provenance/v1"
+        PREDICATE: "predicate.json"
+      run: |
+        set -euo pipefail
+        gh attestation download "oci://$IMAGE" -R ${{ github.repository }} --predicate-type $ATTEST_TYPE --limit 1
+        jq -r '.dsseEnvelope.payload | @base64d | fromjson | .predicate' $BUNDLE > $PREDICATE
+        cosign attest -y --type $ATTEST_TYPE --predicate $PREDICATE $IMAGE
 
     - name: Setup KinD Cluster
       uses: chainguard-dev/actions/setup-kind@eab208ef2d05b13404296a5e194a6b237e8bb213  # v1.6.4
       with:
-        kind-version: ${{ needs.versions.outputs.kind_version }}
-        k8s-version: ${{ needs.versions.outputs.k8s_version }}
-        kind-worker-count: ${{ needs.versions.outputs.worker_node_count }}
+        kind-version: ${{ steps.versions.outputs.kind_version }}
+        k8s-version: ${{ steps.versions.outputs.k8s_version }}
+        kind-worker-count: ${{ steps.versions.outputs.worker_node_count }}
+
     - name: Set Dev Image
-      run: tests/set-dev-image ${{ steps.build.outputs.image-uri }} ${{ env.DEPLOYMENT_PATCH_FILE }}
+      run: tests/set-dev-image ${{ steps.image.outputs.uri }} ${{ env.DEPLOYMENT_PATCH_FILE }}
+
     - name: Run Integration Tests
-      run: tests/integration ${{ needs.versions.outputs.worker_node_count }}
+      run: tests/integration ${{ steps.versions.outputs.worker_node_count }}
 
     - name: Scan Image
       uses: aquasecurity/trivy-action@e368e328979b113139d6f9068e03accaed98a518  # 0.34.1
       with:
         scan-type: image
-        severity: ${{ needs.versions.outputs.scan_severity }}
-        image-ref: ${{ steps.build.outputs.image-uri }}
+        severity: ${{ steps.versions.outputs.scan_severity }}
+        image-ref: ${{ steps.image.outputs.uri }}
         github-pat: ${{ secrets.GITHUB_TOKEN }}
         format: sarif
         output: trivy-results.sarif
         hide-progress: true
         timeout: "10m"
         exit-code: "1"
+
     - name: Upload Scan Results
       if: always()
       uses: github/codeql-action/upload-sarif@89a39a4e59826350b863aa6b6252a07ad50cf83e  # v4.32.4
@@ -135,7 +176,6 @@ jobs:
     steps:
     - uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6  # v2.7.1
     - name: Verify SLSA Provenance (slsa-verifier)
-      shell: bash
       run: |-
         slsa-verifier verify-image ${{ needs.release.outputs.image-uri }} \
           --source-uri "${{ needs.release.outputs.source-uri }}" \
