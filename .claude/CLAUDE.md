@@ -8,7 +8,7 @@ Rolesetter is a Kubernetes controller that automatically assigns `node-role.kube
 
 **How it works:** Watches nodes via informer → reads source label value (e.g., `nodeGroup=gpu-worker`) → patches node with `node-role.kubernetes.io/gpu-worker` label. Uses leader election when `NAMESPACE` is set.
 
-**Tech Stack:** Go 1.26, Kubernetes 1.33+, Ko for images, golangci-lint v2.10.1
+**Tech Stack:** Go 1.26, Kubernetes 1.33+, GoReleaser v2 with Ko integration, golangci-lint v2.10.1
 
 ## Commands
 
@@ -34,7 +34,11 @@ make integration  # Run integration tests in KinD
 make upgrade      # Upgrade all Go dependencies
 
 # Release
-make tag          # Create signed git tag (uses APP_VERSION from Makefile)
+make bump-patch   # Bump patch version (v1.2.3 → v1.2.4), tag, push
+make bump-minor   # Bump minor version (v1.2.3 → v1.3.0), tag, push
+make bump-major   # Bump major version (v1.2.3 → v2.0.0), tag, push
+make release      # Run GoReleaser release (CI only)
+make build-snapshot # GoReleaser snapshot build (local dev)
 ```
 
 ## Non-Negotiable Rules
@@ -91,6 +95,7 @@ linting:
   golangci_lint: 'v2.10.1'
 build:
   registry: 'ghcr.io'
+  goreleaser: 'v2.14.1'
 testing:
   kind_version: '0.29.0'
   k8s_version: '1.33.x'
@@ -177,7 +182,7 @@ for _, tt := range tests {
 - `deployment/overlays/dev/` — Development patches (with image override)
 - `deployment/manifest.yaml` — Pre-built manifest (regenerate via `kubectl kustomize deployment/base`)
 
-**Container image:** `ghcr.io/mchmarny/node-role-controller` built with Ko on `cgr.dev/chainguard/static:latest` (multi-arch: amd64, arm64)
+**Container image:** `ghcr.io/mchmarny/node-role-controller` built via GoReleaser's `kos:` section on `cgr.dev/chainguard/static:latest` (multi-arch: amd64, arm64)
 
 **Environment variables:**
 - `ROLE_LABEL` (required) — Source label to watch (e.g., `nodeGroup`)
@@ -190,7 +195,7 @@ for _, tt := range tests {
 
 **On Push/PR** (`on-push.yaml`): checkout → load-versions → setup-go → tidy → test → coverage → lint Go → lint YAML → trivy fs scan → SARIF upload. Parallel helm-lint job.
 
-**On Tag** (`on-tag.yaml`): checkout → load-versions → setup-go → test → ko build → attest → cosign → KinD integration → trivy image scan → SARIF upload → helm publish → SLSA provenance → verification.
+**On Tag** (`on-tag.yaml`): checkout → load-versions → setup-go → test → GoReleaser release (build + Ko image + GitHub release) → extract image metadata → KinD integration → trivy image scan → SARIF upload → helm publish → SLSA provenance → verification.
 
 All workflows are self-contained (no external composite action dependencies). Trivy installed via Aqua apt repo. SLSA reusable workflow uses tagged version (GitHub requirement).
 
@@ -220,7 +225,9 @@ All workflows are self-contained (no external composite action dependencies). Tr
 | `Makefile` | Build, test, lint, dev cluster commands |
 | `.golangci.yaml` | Linter configuration (25+ linters) |
 | `.yamllint` | YAML linter configuration (ignores `chart/templates/`) |
-| `ko.yaml` | Ko image builder config |
+| `.goreleaser.yaml` | GoReleaser v2 config (builds, Ko images, checksums, changelog, release) |
+| `tools/bump` | Version bump script (major/minor/patch), validates clean state |
+| `tools/common` | Shared shell utilities for tools scripts |
 | `kind.yaml` | KinD test cluster (1 control-plane, 2 workers) |
 | `deployment/` | Kustomize manifests (base + overlays) |
 | `deployment/manifest.yaml` | Pre-built manifest for non-kustomize users |
