@@ -74,11 +74,18 @@ jobs:
       id: image
       run: |
         set -euo pipefail
-        IMAGE_NAME=$(jq -r '[.[] | select(.type == "Docker Manifest")] | first | .name' dist/artifacts.json)
+        jq -r '.[] | select(.type == "Docker Manifest")' dist/artifacts.json
         DIGEST=$(jq -r '[.[] | select(.type == "Docker Manifest")] | first | .extra.Digest' dist/artifacts.json)
-        echo "uri=${IMAGE_NAME}@${DIGEST}" >> "$GITHUB_OUTPUT"
+        REPO=$(jq -r '[.[] | select(.type == "Docker Manifest")] | first | .path' dist/artifacts.json)
+        if [ -z "$REPO" ] || [ "$REPO" = "null" ]; then
+          REPO=$(jq -r '[.[] | select(.type == "Docker Manifest")] | first | .name' dist/artifacts.json)
+        fi
+        # Strip any tag or digest suffix to get bare repository name
+        REPO="${REPO%%@*}"
+        REPO="${REPO%%:*}"
+        echo "uri=${REPO}@${DIGEST}" >> "$GITHUB_OUTPUT"
         echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-        echo "name=${IMAGE_NAME%%:*}" >> "$GITHUB_OUTPUT"
+        echo "name=${REPO}" >> "$GITHUB_OUTPUT"
 
     - name: Setup KinD Cluster
       uses: chainguard-dev/actions/setup-kind@eab208ef2d05b13404296a5e194a6b237e8bb213  # v1.6.4
