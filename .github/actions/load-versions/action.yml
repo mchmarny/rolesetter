@@ -1,0 +1,66 @@
+name: 'Load Versions'
+description: 'Loads tool versions from .settings.yaml (single source of truth)'
+
+outputs:
+  go:
+    description: 'Go version'
+    value: ${{ steps.versions.outputs.go }}
+  golangci_lint:
+    description: 'golangci-lint version'
+    value: ${{ steps.versions.outputs.golangci_lint }}
+  scan_severity:
+    description: 'Trivy scan severity threshold'
+    value: ${{ steps.versions.outputs.scan_severity }}
+  registry:
+    description: 'Container image registry'
+    value: ${{ steps.versions.outputs.registry }}
+  kind_version:
+    description: 'KinD version'
+    value: ${{ steps.versions.outputs.kind_version }}
+  k8s_version:
+    description: 'Kubernetes version for KinD'
+    value: ${{ steps.versions.outputs.k8s_version }}
+  worker_node_count:
+    description: 'Number of KinD worker nodes'
+    value: ${{ steps.versions.outputs.worker_node_count }}
+  cosign:
+    description: 'Cosign version'
+    value: ${{ steps.versions.outputs.cosign }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Load versions from .settings.yaml
+      id: versions
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Languages
+        echo "go=$(yq eval '.languages.go' .settings.yaml)" >> $GITHUB_OUTPUT
+
+        # Linting
+        echo "golangci_lint=$(yq eval '.linting.golangci_lint' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "scan_severity=$(yq eval '.linting.scan_severity' .settings.yaml)" >> $GITHUB_OUTPUT
+
+        # Build
+        echo "registry=$(yq eval '.build.registry' .settings.yaml)" >> $GITHUB_OUTPUT
+
+        # Testing
+        echo "kind_version=$(yq eval '.testing.kind_version' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "k8s_version=$(yq eval '.testing.k8s_version' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "worker_node_count=$(yq eval '.testing.worker_node_count' .settings.yaml)" >> $GITHUB_OUTPUT
+
+        # Signing
+        echo "cosign=$(yq eval '.signing.cosign' .settings.yaml)" >> $GITHUB_OUTPUT
+
+    - name: Display loaded versions
+      shell: bash
+      run: |
+        echo "Loaded from .settings.yaml:"
+        echo "  go: ${{ steps.versions.outputs.go }}"
+        echo "  golangci_lint: ${{ steps.versions.outputs.golangci_lint }}"
+        echo "  scan_severity: ${{ steps.versions.outputs.scan_severity }}"
+        echo "  registry: ${{ steps.versions.outputs.registry }}"
+        echo "  kind_version: ${{ steps.versions.outputs.kind_version }}"
+        echo "  k8s_version: ${{ steps.versions.outputs.k8s_version }}"

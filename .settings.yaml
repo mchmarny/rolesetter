@@ -1,0 +1,26 @@
+# Project settings — single source of truth for versions and configuration.
+# Consumed by: Makefile (yq), GitHub Actions (load-versions action).
+
+# Language Versions
+languages:
+  go: '1.25.0'
+
+# Linting
+linting:
+  golangci_lint: 'v2.4.0'
+  scan_severity: 'CRITICAL,HIGH,MEDIUM'
+
+# Build Configuration
+build:
+  registry: 'ghcr.io'
+
+# Testing Configuration
+testing:
+  kind_version: '0.29.0'
+  k8s_version: '1.33.x'
+  kind_node_image: 'kindest/node:v1.33.1'
+  worker_node_count: '2'
+
+# Signing
+signing:
+  cosign: 'v2.5.0'

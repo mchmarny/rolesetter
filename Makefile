@@ -1,11 +1,13 @@
 APP_NAME           := node-role-controller
 APP_VERSION 	   := v0.5.1
 YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \) -not -path "./chart/templates/*")
-NODE_IMAGE         ?= kindest/node:v1.33.1
-
 CONFIG_FILE        ?= kind.yaml
 
-# Go 
+# Versions from .settings.yaml (single source of truth)
+NODE_IMAGE         ?= $(shell yq -r '.testing.kind_node_image' .settings.yaml 2>/dev/null)
+SCAN_SEVERITY      ?= $(shell yq -r '.linting.scan_severity' .settings.yaml 2>/dev/null)
+
+# Go
 GO111MODULE     := on
 CGO_ENABLED	    := 0
 
