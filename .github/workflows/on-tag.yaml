@@ -54,7 +54,7 @@ jobs:
     steps:
 
     - name: Build Image
-      uses: mchmarny/common/go-build@49e397923ea0995a2dcf1abbea5a0f78ec21b38d  # main
+      uses: mchmarny/common/go-build@eba3b1848a7cacb533285a15b01509d020513f25  # main
       id: build
       with:
         image-uri: ${{ needs.versions.outputs.registry }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
