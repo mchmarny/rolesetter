@@ -57,10 +57,6 @@ linters:
     - tparallel
 
   settings:
-    gosec:
-      excludes:
-        - G706
-
     funlen:
       lines: 200
       statements: 70
