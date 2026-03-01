@@ -72,9 +72,12 @@ jobs:
         yamllint_config_filepath: .yamllint
 
     - name: Install Trivy
-      uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1  # v1.0.0
-      with:
-        cache: false
+      env:
+        TRIVY_VERSION: "0.62.2"
+      run: |
+        wget -q "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+        sudo dpkg -i "trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+        trivy --version
 
     - name: Scan
       run: |
