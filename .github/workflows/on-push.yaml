@@ -71,17 +71,18 @@ jobs:
       with:
         yamllint_config_filepath: .yamllint
 
+    - name: Install Trivy
+      run: |
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
     - name: Scan
-      uses: aquasecurity/trivy-action@e368e328979b113139d6f9068e03accaed98a518  # 0.34.1
-      with:
-        scan-type: fs
-        ignore-unfixed: true
-        hide-progress: true
-        format: sarif
-        output: trivy-results.sarif
-        severity: ${{ steps.versions.outputs.scan_severity }}
-        exit-code: '1'
-        cache: 'false'
+      run: |
+        trivy fs . \
+          --ignore-unfixed \
+          --format sarif \
+          --output trivy-results.sarif \
+          --severity ${{ steps.versions.outputs.scan_severity }} \
+          --exit-code 1
 
     - name: Upload Scan Results
       if: always()
