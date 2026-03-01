@@ -72,9 +72,9 @@ jobs:
         yamllint_config_filepath: .yamllint
 
     - name: Install Trivy
-      run: |
-        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
-        trivy --version
+      uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1  # v1.0.0
+      with:
+        cache: false
 
     - name: Scan
       run: |
