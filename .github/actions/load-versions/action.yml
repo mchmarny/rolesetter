@@ -29,6 +29,9 @@ outputs:
   cosign:
     description: 'Cosign version'
     value: ${{ steps.versions.outputs.cosign }}
+  goreleaser:
+    description: 'GoReleaser version'
+    value: ${{ steps.versions.outputs.goreleaser }}
 
 runs:
   using: 'composite'
@@ -51,6 +54,7 @@ runs:
 
         # Build
         echo "registry=$(yq eval '.build.registry' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "goreleaser=$(yq eval '.build.goreleaser' .settings.yaml)" >> $GITHUB_OUTPUT
 
         # Testing
         echo "kind_version=$(yq eval '.testing.kind_version' .settings.yaml)" >> $GITHUB_OUTPUT
@@ -68,5 +72,6 @@ runs:
         echo "  golangci_lint: ${{ steps.versions.outputs.golangci_lint }}"
         echo "  scan_severity: ${{ steps.versions.outputs.scan_severity }}"
         echo "  registry: ${{ steps.versions.outputs.registry }}"
+        echo "  goreleaser: ${{ steps.versions.outputs.goreleaser }}"
         echo "  kind_version: ${{ steps.versions.outputs.kind_version }}"
         echo "  k8s_version: ${{ steps.versions.outputs.k8s_version }}"

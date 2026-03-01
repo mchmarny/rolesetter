@@ -17,6 +17,7 @@ linting:
 # Build Configuration
 build:
   registry: 'ghcr.io'
+  goreleaser: 'v2.14.1'
 
 # Testing Configuration
 testing:

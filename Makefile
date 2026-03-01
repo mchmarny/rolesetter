@@ -16,7 +16,7 @@ GO_ENV := \
 	GO111MODULE=$(GO111MODULE) \
 	CGO_ENABLED=$(CGO_ENABLED)
 
-.PHONY: all build lint clean test help tidy upgrade tag pre helm-lint helm-publish
+.PHONY: all build lint clean test help tidy upgrade tag pre helm-lint helm-publish release build-snapshot
 
 all: help
 
@@ -24,6 +24,12 @@ pre: tidy lint test vet helm-lint ## Run all quality checks
 
 build: ## Build the Go binary locally
 	$(GO_ENV) go build -v -o bin/$(APP_NAME) main.go
+
+release: ## Run GoReleaser release
+	goreleaser release --clean --fail-fast --timeout 30m
+
+build-snapshot: ## Run GoReleaser snapshot build (local dev)
+	goreleaser build --clean --single-target --snapshot
 
 clean: ## Clean the build artifacts
 	$(GO_ENV) go clean -x; \

@@ -1,0 +1,85 @@
+version: 2
+
+project_name: node-role-controller
+
+builds:
+  - id: node-role-controller
+    binary: node-role-controller
+    main: main.go
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -w
+      - -s
+      - -extldflags "-static"
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+gomod:
+  proxy: false
+
+kos:
+  - id: node-role-controller
+    build: node-role-controller
+    repositories:
+      - ghcr.io/mchmarny/node-role-controller
+    base_image: cgr.dev/chainguard/static:latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    tags:
+      - latest
+      - "{{.Tag}}"
+    preserve_import_paths: false
+    bare: true
+
+sboms:
+  - artifacts: binary
+
+checksum:
+  name_template: "{{ .ProjectName }}_checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ .Tag }}-next"
+
+report_sizes: true
+
+metadata:
+  mod_timestamp: "{{ .CommitTimestamp }}"
+
+release:
+  github:
+    owner: mchmarny
+    name: rolesetter
+  draft: false
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^build:"
+      - "^docs:"
+      - "^test:"
+      - "^lint:"
+      - "^chore: readme"
+      - "^chore: bump version"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Tasks
+      regexp: '^.*?chore(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Bug fixes
+      regexp: '^.*?(fix|bug)(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Others
+      order: 999
