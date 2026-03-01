@@ -15,7 +15,7 @@ GO_ENV := \
 	GO111MODULE=$(GO111MODULE) \
 	CGO_ENABLED=$(CGO_ENABLED)
 
-.PHONY: all build lint clean test help tidy upgrade tag pre helm-lint helm-publish release build-snapshot
+.PHONY: all build lint clean test help tidy upgrade tag pre helm-lint helm-publish release build-snapshot bump-major bump-minor bump-patch
 
 all: help
 
@@ -54,8 +54,14 @@ test: ## Run Go tests and generate coverage report
 vet: ## Vet the Go code
 	$(GO_ENV) go vet ./...
 
-tag: ## Creates a release tag (usage: make tag BUMP=patch|minor|major)
-	tools/bump $(BUMP)
+bump-major: ## Bump major version (1.2.3 → 2.0.0)
+	tools/bump major
+
+bump-minor: ## Bump minor version (1.2.3 → 1.3.0)
+	tools/bump minor
+
+bump-patch: ## Bump patch version (1.2.3 → 1.2.4)
+	tools/bump patch
 
 up: ## Create a Kubernetes cluster with KinD
 	kind create cluster --name $(APP_NAME) --config $(CONFIG_FILE) --wait 5m
