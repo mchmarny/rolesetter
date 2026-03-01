@@ -1,28 +1,30 @@
 # Kubernetes Node Role Labeler
 
-Kubernetes controller that automatically assign node role based on a value of specific node label (e.g., `nodeGroup=gpu-worker` == `node-role.kubernetes.io/gpu-worker`).
+Kubernetes controller that automatically assigns node roles based on a configurable label value (e.g., `nodeGroup=gpu-worker` becomes `node-role.kubernetes.io/gpu-worker`).
 
-## Why 
+## Why
 
-By default, `kubeadm` enables the NodeRestriction admission controller that restricts what labels can be self-applied by `kubelet` on node registration. The `node-role.kubernetes.io/*` label is a restricted label and thus can't be set in the cloud init script or during other node inception process.
+By default, `kubeadm` enables the NodeRestriction admission controller that restricts what labels `kubelet` can self-apply on node registration. The `node-role.kubernetes.io/*` label is restricted and can't be set in cloud init scripts or during other node bootstrap processes.
 
 ## Features
 
-- Watches for node add/update events in the cluster.
-- Checks if the node has the specified label value (configurable via launch parameter).
-- If the node is missing the corresponding Kubernetes role label, it patches the node to add it.
-- Uses exponential backoff for patch operations to handle transient API errors.
-- Emits Prometheus metrics for successful and failed node patch operations.
-- Gracefully handles shutdown signals (SIGINT/SIGTERM).
+- Watches node add/update events via Kubernetes informer
+- Patches nodes with role labels derived from a configurable source label
+- Leader election via Lease for safe multi-replica deployments
+- Exponential backoff with permanent error detection for patch retries
+- Rate-limited Kubernetes API client to prevent API server overload
+- Prometheus metrics for successful and failed patch operations
+- Health (`/healthz`) and readiness (`/readyz`) endpoints
+- Graceful shutdown on SIGINT/SIGTERM with context propagation
 
 ## Requirements
 
-- Runs inside a Kubernetes cluster
-- Requires RBAC permissions to patch node resources
+- Kubernetes 1.33+
+- RBAC permissions: nodes (list, watch, patch) and leases (get, create, update)
 
 ## Usage
 
-Update [patch-configmap.yaml](deployment/overlays/prod/patch-configmap.yaml) to define the node label you want to use as source for the node role. Fro example: 
+Update [patch-configmap.yaml](deployment/overlays/prod/patch-configmap.yaml) to configure the source label and behavior:
 
 ```yaml
 apiVersion: v1
@@ -31,81 +33,105 @@ metadata:
   name: node-role-controller-config
   namespace: node-labeler
 data:
-  roleLabel: "nodeGroup" # value of this label will be the node role 
-  roleReplace: "false"   # whether to replace the existing node role if one exists
+  roleLabel: "nodeGroup"  # value of this label becomes the node role
+  roleReplace: "false"    # whether to replace existing node roles
+  logLevel: "info"        # debug, info, warn, error
 ```
 
-Then apply to the cluster: 
+Then apply to the cluster:
 
 ```sh
 kubectl apply -k deployment/overlays/prod
 ```
 
-This will ensure all nodes with `nodeGroup=customer-gpu` are labeled with `node-role.kubernetes.io/customer-gpu`.
+This ensures all nodes with `nodeGroup=customer-gpu` get labeled with `node-role.kubernetes.io/customer-gpu`.
 
-> If you change ConfigMap value after the deployment remember to restart the deployment: `kubectl -n node-labeler rollout restart deployment node-role-controller`
+> If you change ConfigMap values after deployment, restart to apply: `kubectl -n node-labeler rollout restart deployment node-role-controller`
 
-Alternately, you can apply the prebuilt manifest
+Alternatively, apply the prebuilt manifest:
 
 ```shell
 kubectl apply -f https://raw.githubusercontent.com/mchmarny/rolesetter/refs/heads/main/deployment/manifest.yaml
 ```
 
-This will: 
-* `Namespace` - Isolates the controller’s resources
+This creates:
+
+* `Namespace` - Isolates the controller resources
 * `ServiceAccount` - Authenticates the controller
-* `ClusterRole` - Grants node update permissions
+* `ClusterRole` - Grants node list/watch/patch and lease permissions
 * `ClusterRoleBinding` - Links the role to the ServiceAccount
-* `ConfigMap` - Defines label and logging configuration
-* `Deployment` - Runs 1 replica of the node-role controller
+* `ConfigMap` - Defines label, replace, and logging configuration
+* `Deployment` - Runs the controller with leader election, health probes, and security hardening
+
+## Helm
+
+Install from the OCI registry:
+
+```shell
+helm install node-role-controller oci://ghcr.io/mchmarny/node-role-controller \
+  --namespace node-labeler --create-namespace
+```
+
+Configure via values:
+
+```shell
+helm install node-role-controller oci://ghcr.io/mchmarny/node-role-controller \
+  --namespace node-labeler --create-namespace \
+  --set config.roleLabel=nodeGroup \
+  --set config.roleReplace=true \
+  --set replicas=2
+```
+
+Uninstall:
+
+```shell
+helm uninstall node-role-controller -n node-labeler
+```
 
 ## Metrics
 
-The `node-role-controller` emits following metrics: 
+The controller exposes:
 
-- `node_role_patch_success_total`: Number of successful node patch operations.
-- `node_role_patch_failure_total`: Number of failed node patch operations.
+- `node_role_patch_success_total` - Successful node patch operations (labeled by role)
+- `node_role_patch_failure_total` - Failed node patch operations (labeled by role)
 
-## Validation (optional)
+Available at the `/metrics` endpoint on port `8080`.
 
-The image produced by this repo comes with SLSA attestation which verifies that node role setter image was built in this repo. You can either verify that manually via [Sigstore](https://docs.sigstore.dev/about/overview/)  CLI or in the cluster suing [Sigstore](https://docs.sigstore.dev/about/overview/) policy controller.
+## Validation
 
-### Manual 
+The image comes with SLSA attestation verifying it was built in this repo. You can verify using [Sigstore](https://docs.sigstore.dev/about/overview/) CLI or the in-cluster policy controller.
 
-> Update the image digest to the version you end up using.
+### Manual
+
+> Update the image digest to the version you are using.
 
 ```shell
-export IMAGE=ghcr.io/mchmarny/node-role-controller:v0.5.0@sha256:345638126a65cff794a59c620badcd02cdbc100d45f7745b4b42e32a803ff645
+export IMAGE=ghcr.io/mchmarny/node-role-controller:v0.5.1
 
 cosign verify-attestation \
     --output json \
     --type slsaprovenance \
     --certificate-identity-regexp 'https://github.com/.*/.*/.github/workflows/.*' \
     --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-    $IMAGE 
+    $IMAGE
 ```
 
 ### In Cluster
 
-To to ensure the image used in the node role setter was built in this repo, you can enroll that one namespace (default: `node-labeler`):
+To enforce provenance verification on the `node-labeler` namespace:
 
 ```shell
 kubectl label namespace node-labeler policy.sigstore.dev/include=true
-```
-
-And then add ClusterImagePolicy:
-
-```shell
 kubectl apply -f policy/clusterimagepolicy.yaml
 ```
 
-And then test admission policy: 
+Test admission:
 
 ```shell
- kubectl -n node-labeler run test --image=$IMAGE
+kubectl -n node-labeler run test --image=$IMAGE
 ```
 
-If you don't already have [Sigstore](https://docs.sigstore.dev/about/overview/) policy controller, you add it into your cluster:
+If you don't already have the [Sigstore](https://docs.sigstore.dev/about/overview/) policy controller:
 
 ```shell
 kubectl create namespace cosign-system
@@ -114,69 +140,61 @@ helm repo update
 helm install policy-controller -n cosign-system sigstore/policy-controller
 ```
 
-## Demo 
+## Demo
 
 > Requires [Kind](https://kind.sigs.k8s.io/)
 
-To demo the functionality of this controller, first create a simple Kind configuration file (e.g. `kind.yaml`) to ensure multiple nodes
-
-```yaml
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-
-nodes:
-  - role: control-plane
-    labels:
-      nodeGroup: system
-  - role: worker
-    labels:
-      nodeGroup: worker
-  - role: worker
-    labels:
-      nodeGroup: worker
-```
-
-Next launch a Kind cluster using that config:
+Create a Kind cluster with multiple nodes:
 
 ```shell
-kind create cluster --config kind.yaml
+make up
 ```
 
-Set your cluster context: 
+Check the nodes (workers have no role):
 
 ```shell
-kubectl cluster-info --context kind
+kubectl get nodes
 ```
 
-Node, when you run `kubectl get nodes` you should see `3` nodes:
-
-```shell
+```
 NAME                                 STATUS   ROLES           AGE    VERSION
 node-role-controller-control-plane   Ready    control-plane   2m9s   v1.33.1
 node-role-controller-worker          Ready    <none>          114s   v1.33.1
 node-role-controller-worker2         Ready    <none>          114s   v1.33.1
 ```
 
-Next, deploy the `node-role-controller`:
+Label the workers and deploy:
 
 ```shell
-kubectl apply -k deployment/overlays/prod
+kubectl get nodes -l '!node-role.kubernetes.io/control-plane' -o name | \
+  xargs -I {} kubectl label {} nodeGroup=worker --overwrite
+kubectl apply -k deployment/overlays/dev
 ```
 
-When you run the same list nodes command, you will see the roles of the nodes updated based on the value of the `nodeGroup` label: 
+After a few seconds, roles appear:
 
 ```shell
+kubectl get nodes
+```
+
+```
 NAME                                 STATUS   ROLES                  AGE     VERSION
-node-role-controller-control-plane   Ready    control-plane,system   3m12s   v1.33.1
+node-role-controller-control-plane   Ready    control-plane          3m12s   v1.33.1
 node-role-controller-worker          Ready    worker                 2m57s   v1.33.1
 node-role-controller-worker2         Ready    worker                 2m57s   v1.33.1
 ```
 
-Any new node that joins the cluster will automatically have its role set on a value of that label. 
+Change a node's label to see the role update:
 
-You can also `kubectl edit node node-role-controller-worker` and change the value of the `nodeGroup` label to see new role being assigned to that node. 
+```shell
+kubectl label node node-role-controller-worker nodeGroup=gpu --overwrite
+```
 
-> Note: technically, node can have multiple roles so the `kind-node-role-controller` just adds new one. 
+Clean up:
+
+```shell
+make down
+```
 
 ## Disclaimer
 

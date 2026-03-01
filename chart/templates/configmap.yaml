@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "node-role-controller.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "node-role-controller.labels" . | nindent 4 }}
+data:
+  roleLabel: {{ .Values.config.roleLabel | quote }}
+  roleReplace: {{ .Values.config.roleReplace | quote }}
+  logLevel: {{ .Values.config.logLevel | quote }}

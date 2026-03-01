@@ -1,6 +1,6 @@
 APP_NAME           := node-role-controller
 APP_VERSION 	   := v0.5.1
-YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
+YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \) -not -path "./chart/templates/*")
 NODE_IMAGE         ?= kindest/node:v1.33.1
 
 CONFIG_FILE        ?= kind.yaml
@@ -14,11 +14,11 @@ GO_ENV := \
 	GO111MODULE=$(GO111MODULE) \
 	CGO_ENABLED=$(CGO_ENABLED)
 
-.PHONY: all build lint clean test help tidy upgrade, tag, pre
+.PHONY: all build lint clean test help tidy upgrade tag pre helm-lint helm-publish
 
 all: help
 
-pre: tidy lint test vet ## Run all quality checks
+pre: tidy lint test vet helm-lint ## Run all quality checks
 
 build: ## Build the Go binary locally
 	$(GO_ENV) go build -v -o bin/$(APP_NAME) main.go
@@ -60,6 +60,18 @@ down: ## Delete a Kubernetes cluster with KinD
 integration: ## Run integration tests
 	@echo "Running integration tests..."; \
 	bash tests/integration 2 || exit 1;
+
+helm-lint: ## Lint the Helm chart
+	helm lint chart/
+
+helm-publish: ## Package and push Helm chart to OCI registry
+	@TAG=$${TAG:?TAG is required}; \
+	sed -i.bak "s/^version:.*/version: $${TAG#v}/" chart/Chart.yaml; \
+	sed -i.bak "s/^appVersion:.*/appVersion: \"$${TAG#v}\"/" chart/Chart.yaml; \
+	rm -f chart/Chart.yaml.bak; \
+	helm package chart/; \
+	helm push node-role-controller-$${TAG#v}.tgz oci://ghcr.io/mchmarny; \
+	rm -f node-role-controller-$${TAG#v}.tgz
 
 help: ## Displays available commands
 	@echo "Available make targets:"; \
