@@ -1,5 +1,4 @@
 APP_NAME           := node-role-controller
-APP_VERSION 	   := v0.6.0
 YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \) -not -path "./chart/templates/*")
 CONFIG_FILE        ?= kind.yaml
 
@@ -55,9 +54,8 @@ test: ## Run Go tests and generate coverage report
 vet: ## Vet the Go code
 	$(GO_ENV) go vet ./...
 
-tag: ## Creates a release tag
-	git tag -s -m "version bump to $(APP_VERSION)" $(APP_VERSION); \
-	git push origin $(APP_VERSION)
+tag: ## Creates a release tag (usage: make tag BUMP=patch|minor|major)
+	tools/bump $(BUMP)
 
 up: ## Create a Kubernetes cluster with KinD
 	kind create cluster --name $(APP_NAME) --config $(CONFIG_FILE) --wait 5m
