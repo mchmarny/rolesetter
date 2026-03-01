@@ -73,7 +73,7 @@ jobs:
 
     - name: Install Trivy
       env:
-        TRIVY_VERSION: "0.62.2"
+        TRIVY_VERSION: "0.69.1"
       run: |
         wget -q "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb"
         sudo dpkg -i "trivy_${TRIVY_VERSION}_Linux-64bit.deb"
