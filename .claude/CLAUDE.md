@@ -8,7 +8,7 @@ Rolesetter is a Kubernetes controller that automatically assigns `node-role.kube
 
 **How it works:** Watches nodes via informer → reads source label value (e.g., `nodeGroup=gpu-worker`) → patches node with `node-role.kubernetes.io/gpu-worker` label. Uses leader election when `NAMESPACE` is set.
 
-**Tech Stack:** Go 1.26, Kubernetes 1.33+, Ko for images, golangci-lint v2.4.0
+**Tech Stack:** Go 1.26, Kubernetes 1.33+, Ko for images, golangci-lint v2.10.1
 
 ## Commands
 
@@ -58,7 +58,7 @@ make tag          # Create signed git tag (uses APP_VERSION from Makefile)
 |---------|---------|
 | `pkg/node` | Controller entry point, informer, leader election, signal handling |
 | `pkg/role` | Node role patching with backoff, permanent error detection, JSON patches |
-| `pkg/log` | Zap logger factory (production, debug, test modes) |
+| `pkg/logger` | Zap logger factory (production, debug, test modes) |
 | `pkg/metric` | Prometheus counter metrics with safe re-registration |
 | `pkg/server` | HTTP server for metrics (`/metrics`), health (`/healthz`), readiness (`/readyz`) |
 
@@ -73,6 +73,34 @@ main.go → pkg/node.InformNodeRoles()
   → runInformer: creates single CacheResourceHandler → watches nodes → EnsureRole(ctx, obj)
   → metrics server runs always (regardless of leadership)
 ```
+
+## Version Management
+
+`.settings.yaml` is the single source of truth for all tool versions and configuration. Consumed by:
+- **Makefile** via `yq` for local development
+- **GitHub Actions** via `.github/actions/load-versions` composite action
+
+Settings structure:
+```yaml
+languages:
+  go: '1.26.0'
+scanning:
+  trivy: '0.69.1'        # installed via apt repo in CI
+  scan_severity: 'CRITICAL,HIGH,MEDIUM'
+linting:
+  golangci_lint: 'v2.10.1'
+build:
+  registry: 'ghcr.io'
+testing:
+  kind_version: '0.29.0'
+  k8s_version: '1.33.x'
+  kind_node_image: 'kindest/node:v1.33.1'
+  worker_node_count: '2'
+signing:
+  cosign: 'v2.5.0'
+```
+
+When updating versions: change `.settings.yaml` only — workflows and Makefile read from it.
 
 ## Required Patterns
 
@@ -141,7 +169,7 @@ for _, tt := range tests {
 
 ## Deployment
 
-**Helm chart** in `chart/` — OCI-native, published to `oci://ghcr.io/mchmarny/node-role-controller` on tag.
+**Helm chart** in `chart/` — OCI-native, published to `oci://ghcr.io/mchmarny/node-role-controller` on tag. Version injected via `sed` at release time.
 
 **Kustomize-based** with overlays:
 - `deployment/base/` — Namespace, ServiceAccount, RBAC, ConfigMap, Deployment
@@ -160,10 +188,11 @@ for _, tt := range tests {
 
 ## CI/CD
 
-**On Push/PR** (`on-push.yaml`): Test + lint + vulnerability scan (with concurrency group, 15min timeout)
-**On Tag** (`on-tag.yaml`): Build image → integration test in KinD → Trivy scan + SARIF upload → SLSA provenance → verification
+**On Push/PR** (`on-push.yaml`): checkout → load-versions → setup-go → tidy → test → coverage → lint Go → lint YAML → trivy fs scan → SARIF upload. Parallel helm-lint job.
 
-All actions SHA-pinned. SLSA reusable workflow uses tagged version (GitHub requirement).
+**On Tag** (`on-tag.yaml`): checkout → load-versions → setup-go → test → ko build → attest → cosign → KinD integration → trivy image scan → SARIF upload → helm publish → SLSA provenance → verification.
+
+All workflows are self-contained (no external composite action dependencies). Trivy installed via Aqua apt repo. SLSA reusable workflow uses tagged version (GitHub requirement).
 
 ## Anti-Patterns (Do Not Do)
 
@@ -179,18 +208,22 @@ All actions SHA-pinned. SLSA reusable workflow uses tagged version (GitHub requi
 | Add features not requested | Implement exactly what was asked |
 | Create new files when editing suffices | Prefer `Edit` over `Write` |
 | Continue after 3 failed fix attempts | Stop, reassess approach, explain blockers |
+| Hardcode versions in workflows | Use `.settings.yaml` via load-versions action |
+| Use composite actions from external repos | Inline steps directly in workflows |
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
+| `.settings.yaml` | Single source of truth for versions and config |
+| `.github/actions/load-versions/` | Composite action to load `.settings.yaml` into workflow outputs |
 | `Makefile` | Build, test, lint, dev cluster commands |
-| `.golangci.yaml` | Linter configuration (20+ linters) |
-| `.yamllint` | YAML linter configuration |
+| `.golangci.yaml` | Linter configuration (25+ linters) |
+| `.yamllint` | YAML linter configuration (ignores `chart/templates/`) |
 | `ko.yaml` | Ko image builder config |
 | `kind.yaml` | KinD test cluster (1 control-plane, 2 workers) |
 | `deployment/` | Kustomize manifests (base + overlays) |
 | `deployment/manifest.yaml` | Pre-built manifest for non-kustomize users |
+| `chart/` | Helm chart (OCI-published to ghcr.io on tag) |
 | `tests/integration` | Integration test script for KinD |
-| `chart/` | Helm chart (OCI-published to ghcr.io) |
 | `CONTRIBUTING.md` | Contribution guidelines, DCO |
