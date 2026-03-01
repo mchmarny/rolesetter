@@ -81,6 +81,7 @@ jobs:
         output: trivy-results.sarif
         severity: ${{ steps.versions.outputs.scan_severity }}
         exit-code: '1'
+        cache: 'false'
 
     - name: Upload Scan Results
       if: always()
