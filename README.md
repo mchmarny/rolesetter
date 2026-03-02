@@ -10,9 +10,21 @@ By default, `kubeadm` enables the NodeRestriction admission controller that rest
 
 ### Helm (recommended)
 
+`helm upgrade --install` works for both fresh installs and upgrades:
+
 ```shell
-helm install node-role-controller oci://ghcr.io/mchmarny/node-role-controller \
-  --namespace node-labeler --create-namespace
+helm upgrade --install node-role-controller \
+  oci://ghcr.io/mchmarny/node-role-controller \
+  -n node-role-controller --create-namespace
+```
+
+To schedule on tainted nodes, add tolerations:
+
+```shell
+helm upgrade --install node-role-controller \
+  oci://ghcr.io/mchmarny/node-role-controller \
+  -n node-role-controller --create-namespace \
+  --set-json 'tolerations=[{"key":"dedicated","value":"system-workload","operator":"Equal","effect":"NoExecute"},{"key":"dedicated","value":"system-workload","operator":"Equal","effect":"NoSchedule"}]'
 ```
 
 ### Manifest
@@ -32,8 +44,9 @@ kubectl apply -k deployment/overlays/prod
 The controller is configured via environment variables sourced from a ConfigMap. With Helm, set values directly:
 
 ```shell
-helm install node-role-controller oci://ghcr.io/mchmarny/node-role-controller \
-  --namespace node-labeler --create-namespace \
+helm upgrade --install node-role-controller \
+  oci://ghcr.io/mchmarny/node-role-controller \
+  -n node-role-controller --create-namespace \
   --set config.roleLabel=nodeGroup \
   --set config.roleReplace=true \
   --set config.logLevel=debug
@@ -53,19 +66,12 @@ helm install node-role-controller oci://ghcr.io/mchmarny/node-role-controller \
 | `tolerations` | `[]` | Pod tolerations |
 | `nodeSelector` | `{}` | Pod node selector |
 
-> After changing configuration, restart to apply: `kubectl -n node-labeler rollout restart deployment node-role-controller`
-
-## Upgrade
-
-```shell
-helm upgrade node-role-controller oci://ghcr.io/mchmarny/node-role-controller \
-  --namespace node-labeler
-```
+> After changing configuration, restart to apply: `kubectl -n node-role-controller rollout restart deployment node-role-controller`
 
 ## Uninstall
 
 ```shell
-helm uninstall node-role-controller -n node-labeler
+helm uninstall node-role-controller -n node-role-controller
 ```
 
 ## How It Works
