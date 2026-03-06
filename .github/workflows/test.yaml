@@ -22,7 +22,7 @@ jobs:
       id: versions
       uses: ./.github/actions/load-versions
 
-    - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00  # v6.0.0
+    - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417  # v6.3.0
       with:
         go-version: ${{ steps.versions.outputs.go }}
         cache: true
@@ -37,13 +37,13 @@ jobs:
         go tool cover -func=coverage.out
 
     - name: Coverage
-      uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7  # v5.5.1
+      uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de  # v5.5.2
       with:
         fail_ci_if_error: true
         use_oidc: true
 
     - name: Lint Go
-      uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9  # v8.0.0
+      uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20  # v9.2.0
       with:
         version: ${{ steps.versions.outputs.golangci_lint }}
 
@@ -72,6 +72,6 @@ jobs:
 
     - name: Upload Scan Results
       if: always()
-      uses: github/codeql-action/upload-sarif@89a39a4e59826350b863aa6b6252a07ad50cf83e  # v4.32.4
+      uses: github/codeql-action/upload-sarif@0d579ffd059c29b07949a3cce3983f0780820c98  # v4.32.6
       with:
         sarif_file: trivy-results.sarif
