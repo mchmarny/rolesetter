@@ -90,7 +90,7 @@ jobs:
         echo "name=${REPO}" >> "$GITHUB_OUTPUT"
 
     - name: Setup KinD Cluster
-      uses: chainguard-dev/actions/setup-kind@e9290faa91aa6b1226df129cb450f2ff49235b92  # v1.6.6
+      uses: chainguard-dev/actions/setup-kind@7440e20e3e0bb180a2f6e330bcd53504e2ac8980  # v1.6.8
       with:
         kind-version: ${{ steps.versions.outputs.kind_version }}
         k8s-version: ${{ steps.versions.outputs.k8s_version }}
@@ -121,7 +121,7 @@ jobs:
 
     - name: Upload Scan Results
       if: always()
-      uses: github/codeql-action/upload-sarif@0d579ffd059c29b07949a3cce3983f0780820c98  # v4.32.6
+      uses: github/codeql-action/upload-sarif@b1bff81932f5cdfc8695c7752dcee935dcd061c8  # v4.33.0
       with:
         sarif_file: trivy-results.sarif
 
