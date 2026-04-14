@@ -48,7 +48,7 @@ jobs:
       id: versions
       uses: ./.github/actions/load-versions
 
-    - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417  # v6.3.0
+    - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6.4.0
       with:
         go-version: ${{ steps.versions.outputs.go }}
         cache: true
@@ -61,7 +61,7 @@ jobs:
         version: ${{ steps.versions.outputs.goreleaser }}
 
     - name: Login to GHCR
-      uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
+      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
@@ -90,7 +90,7 @@ jobs:
         echo "name=${REPO}" >> "$GITHUB_OUTPUT"
 
     - name: Setup KinD Cluster
-      uses: chainguard-dev/actions/setup-kind@e9290faa91aa6b1226df129cb450f2ff49235b92  # v1.6.6
+      uses: chainguard-dev/actions/setup-kind@f45211d3e8f9d2676c6b8cdd6a765435e06c819d  # v1.6.13
       with:
         kind-version: ${{ steps.versions.outputs.kind_version }}
         k8s-version: ${{ steps.versions.outputs.k8s_version }}
@@ -121,7 +121,7 @@ jobs:
 
     - name: Upload Scan Results
       if: always()
-      uses: github/codeql-action/upload-sarif@0d579ffd059c29b07949a3cce3983f0780820c98  # v4.32.6
+      uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13  # v4.35.1
       with:
         sarif_file: trivy-results.sarif
 
@@ -134,7 +134,7 @@ jobs:
       packages: write
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-    - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4  # v4.3.1
+    - uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2  # v5.0.0
     - name: Login to GHCR
       run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
     - name: Package and Push Chart
