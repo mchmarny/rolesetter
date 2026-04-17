@@ -6,9 +6,9 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/prometheus/client_golang v1.23.2
 	go.uber.org/zap v1.27.1
-	k8s.io/api v0.35.3
-	k8s.io/apimachinery v0.35.3
-	k8s.io/client-go v0.35.3
+	k8s.io/api v0.35.4
+	k8s.io/apimachinery v0.35.4
+	k8s.io/client-go v0.35.4
 )
 
 require (
