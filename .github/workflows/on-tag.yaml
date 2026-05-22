@@ -55,7 +55,7 @@ jobs:
         cache-dependency-path: go.sum
 
     - name: Install GoReleaser
-      uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29  # v7.0.0
+      uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89  # v7.2.2
       with:
         install-only: true
         version: ${{ steps.versions.outputs.goreleaser }}
@@ -90,7 +90,7 @@ jobs:
         echo "name=${REPO}" >> "$GITHUB_OUTPUT"
 
     - name: Setup KinD Cluster
-      uses: chainguard-dev/actions/setup-kind@f45211d3e8f9d2676c6b8cdd6a765435e06c819d  # v1.6.13
+      uses: chainguard-dev/actions/setup-kind@c69a264ec2a5934c3186c618f368fc1c86f16cff  # v1.6.19
       with:
         kind-version: ${{ steps.versions.outputs.kind_version }}
         k8s-version: ${{ steps.versions.outputs.k8s_version }}
@@ -121,7 +121,7 @@ jobs:
 
     - name: Upload Scan Results
       if: always()
-      uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13  # v4.35.1
+      uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba  # v4.35.5
       with:
         sarif_file: trivy-results.sarif
 
