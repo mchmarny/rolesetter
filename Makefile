@@ -77,7 +77,7 @@ lint-yaml: ## Lint YAML files
 
 test: ## Run Go tests with race detector and coverage
 	@set -e; \
-	$(GO_ENV) go test -count=1 -race -timeout=$(TEST_TIMEOUT) -covermode=atomic -coverprofile=coverage.out ./...; \
+	GO111MODULE=$(GO111MODULE) CGO_ENABLED=1 go test -count=1 -race -timeout=$(TEST_TIMEOUT) -covermode=atomic -coverprofile=coverage.out ./...; \
 	echo "Test coverage:"; \
 	$(GO_ENV) go tool cover -func=coverage.out | tail -1
 
