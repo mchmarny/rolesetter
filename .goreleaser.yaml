@@ -37,8 +37,9 @@ kos:
       - linux/amd64
       - linux/arm64
     tags:
-      - latest
       - "{{.Tag}}"
+      # Promote :latest only on stable tags (skip when Prerelease is set).
+      - '{{ if not .Prerelease }}latest{{ end }}'
     preserve_import_paths: false
     bare: true
 
@@ -59,6 +60,7 @@ release:
     owner: mchmarny
     name: rolesetter
   draft: false
+  prerelease: auto  # tags matching v*-* (e.g., v1.2.3-rc1) are marked as pre-release
 
 changelog:
   sort: asc

@@ -1,0 +1,57 @@
+name: stale
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # daily at 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+
+  stale:
+    name: Mark stale issues and PRs
+    runs-on: ubuntu-latest
+    if: github.repository == 'mchmarny/rolesetter'
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@eb5cf3af3ac0a1aa4c9c45633dd1ae542a27a899  # v10.1.0
+        with:
+          stale-issue-message: |
+            This issue has been marked as stale due to 90 days of inactivity.
+            It will be closed in 30 days unless there is new activity.
+
+            To keep this issue open:
+            - Add a comment with an update
+            - Add the `lifecycle/frozen` label
+          days-before-stale: 90
+          stale-issue-label: 'lifecycle/stale'
+          exempt-issue-labels: 'lifecycle/frozen,priority/critical,good first issue'
+
+          stale-pr-message: |
+            This PR has been marked as stale due to 30 days of inactivity.
+            It will be closed in 30 days unless there is new activity.
+
+            To keep this PR open:
+            - Push new commits or add a comment
+            - Add the `lifecycle/frozen` label
+          days-before-pr-stale: 30
+          stale-pr-label: 'lifecycle/stale'
+          exempt-pr-labels: 'lifecycle/frozen,do-not-merge'
+
+          close-issue-message: |
+            This issue was automatically closed due to inactivity after being marked as stale.
+            Reopen with updated context, or add `lifecycle/frozen` to prevent future auto-close.
+          close-pr-message: |
+            This PR was automatically closed due to inactivity after being marked as stale.
+            Reopen and push new commits, or add `lifecycle/frozen` to prevent future auto-close.
+          days-before-close: 30
+          operations-per-run: 500

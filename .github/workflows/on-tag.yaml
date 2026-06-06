@@ -2,7 +2,8 @@ name: on_tag
 on:
   push:
     tags:
-    - 'v[0-9]+.[0-9]+.[0-9]+'  # Only build tag with semantic versioning format
+    # Semantic versioning with optional pre-release suffix (e.g., v1.2.3, v1.2.3-rc1).
+    - 'v[0-9]+.[0-9]+.[0-9]+*'
 
 permissions:
   contents: read
@@ -13,6 +14,29 @@ concurrency:
 
 jobs:
 
+  detect:
+    name: Detect Release Type
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions:
+      contents: read
+    outputs:
+      is_prerelease: ${{ steps.check.outputs.is_prerelease }}
+    steps:
+      - name: Check tag for pre-release suffix
+        id: check
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "${TAG}" == *-* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "Pre-release detected: ${TAG}"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "Stable release: ${TAG}"
+          fi
+
   test:
     uses: ./.github/workflows/test.yaml
     permissions:
@@ -21,7 +45,7 @@ jobs:
       id-token: write
 
   release:
-    needs: [test]
+    needs: [test, detect]
     timeout-minutes: 30
     env:
       DEPLOYMENT_PATCH_FILE: deployment/overlays/dev/patch-deployment.yaml
@@ -43,6 +67,7 @@ jobs:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       with:
         fetch-depth: 0
+        persist-credentials: false
 
     - name: Load versions
       id: versions
@@ -85,9 +110,11 @@ jobs:
         # Strip any tag or digest suffix to get bare repository name
         REPO="${REPO%%@*}"
         REPO="${REPO%%:*}"
-        echo "uri=${REPO}@${DIGEST}" >> "$GITHUB_OUTPUT"
-        echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-        echo "name=${REPO}" >> "$GITHUB_OUTPUT"
+        {
+          echo "uri=${REPO}@${DIGEST}"
+          echo "digest=${DIGEST}"
+          echo "name=${REPO}"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Setup KinD Cluster
       uses: chainguard-dev/actions/setup-kind@f45211d3e8f9d2676c6b8cdd6a765435e06c819d  # v1.6.13
@@ -97,13 +124,18 @@ jobs:
         kind-worker-count: ${{ steps.versions.outputs.worker_node_count }}
 
     - name: Set Dev Image
-      run: tests/set-dev-image ${{ steps.image.outputs.uri }} ${{ env.DEPLOYMENT_PATCH_FILE }}
+      env:
+        IMAGE_URI: ${{ steps.image.outputs.uri }}
+      run: tests/set-dev-image "$IMAGE_URI" "$DEPLOYMENT_PATCH_FILE"
 
     - name: Run Integration Tests
-      run: tests/integration ${{ steps.versions.outputs.worker_node_count }}
+      env:
+        WORKER_COUNT: ${{ steps.versions.outputs.worker_node_count }}
+      run: tests/integration "$WORKER_COUNT"
 
     - name: Install Trivy
       run: |
+        set -euo pipefail
         sudo apt-get install -y wget apt-transport-https gnupg
         wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
         echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
@@ -111,11 +143,15 @@ jobs:
         sudo apt-get install -y trivy
 
     - name: Scan Image
+      env:
+        IMAGE_URI: ${{ steps.image.outputs.uri }}
+        SEVERITY: ${{ steps.versions.outputs.scan_severity }}
       run: |
-        trivy image ${{ steps.image.outputs.uri }} \
+        set -euo pipefail
+        trivy image "$IMAGE_URI" \
           --format sarif \
           --output trivy-results.sarif \
-          --severity ${{ steps.versions.outputs.scan_severity }} \
+          --severity "$SEVERITY" \
           --timeout 10m \
           --exit-code 1
 
@@ -126,24 +162,37 @@ jobs:
         sarif_file: trivy-results.sarif
 
   helm-publish:
-    needs: [release]
+    needs: [release, detect]
+    # Skip helm chart publish for pre-release tags.
+    if: needs.detect.outputs.is_prerelease == 'false'
     timeout-minutes: 10
     runs-on: ubuntu-latest
+    concurrency:
+      group: helm-publish-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      with:
+        persist-credentials: false
     - uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2  # v5.0.0
     - name: Login to GHCR
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ACTOR: ${{ github.actor }}
+      run: echo "$GITHUB_TOKEN" | helm registry login ghcr.io -u "$ACTOR" --password-stdin
     - name: Package and Push Chart
+      env:
+        TAG: ${{ github.ref_name }}
       run: |
-        TAG=${{ github.ref_name }}
-        sed -i "s/^version:.*/version: ${TAG#v}/" chart/Chart.yaml
-        sed -i "s/^appVersion:.*/appVersion: \"${TAG#v}\"/" chart/Chart.yaml
+        set -euo pipefail
+        VERSION="${TAG#v}"
+        sed -i "s/^version:.*/version: ${VERSION}/" chart/Chart.yaml
+        sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" chart/Chart.yaml
         helm package chart/
-        helm push node-role-controller-${TAG#v}.tgz oci://ghcr.io/mchmarny
+        helm push "node-role-controller-${VERSION}.tgz" oci://ghcr.io/mchmarny
 
   provenance:
     needs: [release]
@@ -168,7 +217,51 @@ jobs:
     steps:
     - uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6  # v2.7.1
     - name: Verify SLSA Provenance (slsa-verifier)
-      run: |-
-        slsa-verifier verify-image ${{ needs.release.outputs.image-uri }} \
-          --source-uri "${{ needs.release.outputs.source-uri }}" \
-          --source-tag "${{ needs.release.outputs.source-tag }}"
+      env:
+        IMAGE_URI: ${{ needs.release.outputs.image-uri }}
+        SOURCE_URI: ${{ needs.release.outputs.source-uri }}
+        SOURCE_TAG: ${{ needs.release.outputs.source-tag }}
+      run: |
+        set -euo pipefail
+        slsa-verifier verify-image "$IMAGE_URI" \
+          --source-uri "$SOURCE_URI" \
+          --source-tag "$SOURCE_TAG"
+
+  summary:
+    name: Release Summary
+    runs-on: ubuntu-latest
+    needs: [detect, test, release, helm-publish, provenance, verification]
+    if: always()
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Release Summary
+        env:
+          DETECT: ${{ needs.detect.result }}
+          TESTS: ${{ needs.test.result }}
+          RELEASE: ${{ needs.release.result }}
+          HELM_PUBLISH: ${{ needs.helm-publish.result }}
+          PROVENANCE: ${{ needs.provenance.result }}
+          VERIFICATION: ${{ needs.verification.result }}
+          TAG: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          IS_PRERELEASE: ${{ needs.detect.outputs.is_prerelease }}
+        run: |
+          set -euo pipefail
+          RELEASE_TYPE="stable"
+          [[ "${IS_PRERELEASE}" == "true" ]] && RELEASE_TYPE="pre-release"
+          {
+            echo "## Release Summary"
+            echo ""
+            echo "**Tag:** \`${TAG}\`  **Commit:** \`${COMMIT}\`  **Type:** ${RELEASE_TYPE}"
+            echo ""
+            echo "| Phase | Result |"
+            echo "|-------|--------|"
+            echo "| Detect | ${DETECT} |"
+            echo "| Tests | ${TESTS} |"
+            echo "| Release (GoReleaser + KinD + Trivy) | ${RELEASE} |"
+            echo "| Helm Publish | ${HELM_PUBLISH} |"
+            echo "| SLSA Provenance | ${PROVENANCE} |"
+            echo "| SLSA Verification | ${VERIFICATION} |"
+          } >> "$GITHUB_STEP_SUMMARY"

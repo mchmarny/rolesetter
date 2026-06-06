@@ -1,0 +1,53 @@
+area/ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - 'Makefile'
+          - '.golangci.yaml'
+          - '.yamllint'
+          - '.goreleaser.yaml'
+          - '.settings.yaml'
+
+area/controller:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'pkg/node/**'
+          - 'pkg/role/**'
+          - 'main.go'
+
+area/observability:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'pkg/server/**'
+          - 'pkg/metric/**'
+          - 'pkg/logger/**'
+
+area/chart:
+  - changed-files:
+      - any-glob-to-any-file: 'chart/**'
+
+area/deployment:
+  - changed-files:
+      - any-glob-to-any-file: 'deployment/**'
+
+area/tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'tests/**'
+          - '**/*_test.go'
+
+area/docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - '**/*.md'
+
+area/policy:
+  - changed-files:
+      - any-glob-to-any-file: 'policy/**'
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'go.mod'
+          - 'go.sum'
