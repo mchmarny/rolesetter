@@ -69,14 +69,23 @@ make build-snapshot # GoReleaser snapshot build (local dev)
 **Architecture:**
 
 ```
-main.go → pkg/node.InformNodeRoles()
-  → reads env vars (ROLE_LABEL, NAMESPACE, etc.)
+main.go (handles -version) → pkg/node.InformNodeRoles()
+  → reads env vars (ROLE_LABEL, NAMESPACE, etc.) via optionsFromEnv
   → creates Informer with functional options
-  → if NAMESPACE set: leader election via Lease → runInformer
-  → if NAMESPACE empty: runInformer directly
-  → runInformer: creates single CacheResourceHandler → watches nodes → EnsureRole(ctx, obj)
-  → metrics server runs always (regardless of leadership)
+  → Inform(ctx):
+      • starts metrics server in goroutine; fatal Serve error cancels ctx
+      • if NAMESPACE set: leader election via Lease (ReleaseOnCancel: true)
+          OnStartedLeading → runInformer; failure cancels lease (releases leadership)
+      • if NAMESPACE empty: runInformer directly (leading=true)
+      • runInformer: SharedInformerFactoryWithOptions with LabelSelector=ROLE_LABEL
+          single CacheResourceHandler → EnsureRole(ctx, obj)
+          flips cacheSynced after WaitForCacheSync
+  → /readyz returns 503 until cacheSynced && (namespace=="" || leading)
 ```
+
+**Build metadata** is injected at link time via GoReleaser:
+`main.version`, `main.commit`, `main.date` populated from `-X` ldflags.
+`./node-role-controller -version` prints them.
 
 ## Version Management
 
@@ -186,14 +195,18 @@ for _, tt := range tests {
 
 **Environment variables:**
 - `ROLE_LABEL` (required) — Source label to watch (e.g., `nodeGroup`)
-- `ROLE_LABEL_REPLACE` — Replace existing role labels (`true`/`false`)
+- `ROLE_LABEL_REPLACE` — Replace stale role labels (accepts `true`/`false`/`1`/`0`/`yes`/`no`)
 - `NAMESPACE` — Enables leader election via Lease in this namespace (injected via downward API)
 - `SERVER_PORT` — Metrics server port (default: `8080`)
-- `LOG_LEVEL` — Logging level (`debug`/`info`/`warn`/`error`, default: `info`)
+- `LOG_LEVEL` — Logging level (`debug`/`info`/`warn`/`error`, default: `info`; unrecognized values log a warning and fall back to `info`)
+
+**Optional chart features:**
+- `serviceMonitor.enabled=true` — emits a headless `Service` and a `monitoring.coreos.com/v1/ServiceMonitor`
+- `podDisruptionBudget.enabled=true` (requires `replicas > 1`) — emits a `policy/v1/PodDisruptionBudget`
 
 ## CI/CD
 
-**On Push/PR** (`on-push.yaml`): checkout → load-versions → setup-go → tidy → test → coverage → lint Go → lint YAML → trivy fs scan → SARIF upload. Parallel helm-lint job.
+**On Push/PR** (`on-push.yaml`): checkout → load-versions → setup-go → tidy → test → coverage → lint Go → lint YAML → kustomize drift check (`deployment/manifest.yaml` must equal `kubectl kustomize deployment/base`) → trivy fs scan → SARIF upload. Parallel helm-lint job.
 
 **On Tag** (`on-tag.yaml`): checkout → load-versions → setup-go → test → GoReleaser release (build + Ko image + GitHub release) → extract image metadata → KinD integration → trivy image scan → SARIF upload → helm publish → SLSA provenance → verification.
 

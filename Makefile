@@ -2,9 +2,18 @@ APP_NAME           := node-role-controller
 YAML_FILES         := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \) -not -path "./chart/templates/*")
 CONFIG_FILE        ?= kind.yaml
 
-# Versions from .settings.yaml (single source of truth)
+# Versions and quality gates from .settings.yaml (single source of truth)
 NODE_IMAGE         ?= $(shell yq -r '.testing.kind_node_image' .settings.yaml 2>/dev/null)
 SCAN_SEVERITY      ?= $(shell yq -r '.linting.scan_severity' .settings.yaml 2>/dev/null)
+COVERAGE_THRESHOLD ?= $(shell yq -r '.quality.coverage_threshold' .settings.yaml 2>/dev/null)
+LINT_TIMEOUT       ?= $(shell yq -r '.quality.lint_timeout' .settings.yaml 2>/dev/null)
+TEST_TIMEOUT       ?= $(shell yq -r '.quality.test_timeout' .settings.yaml 2>/dev/null)
+GO_VERSION         := $(shell yq -r '.languages.go' .settings.yaml 2>/dev/null)
+GOLINT_VERSION     := $(shell golangci-lint --version 2>/dev/null | awk '{print $$4}' || echo "not installed")
+GORELEASER_VERSION := $(shell goreleaser --version 2>/dev/null | sed -n 's/^GitVersion:[[:space:]]*//p' || echo "not installed")
+COMMIT             := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+BRANCH             := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+VERSION            ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
 
 # Go
 GO111MODULE     := on
@@ -15,44 +24,76 @@ GO_ENV := \
 	GO111MODULE=$(GO111MODULE) \
 	CGO_ENABLED=$(CGO_ENABLED)
 
-.PHONY: all build lint clean test help tidy upgrade tag pre helm-lint helm-publish release build-snapshot bump-major bump-minor bump-patch
+.PHONY: all info build lint lint-go lint-yaml clean test test-coverage bench fmt-check help tidy upgrade tag qualify helm-lint helm-publish release build bump-major bump-minor bump-patch vet
 
 all: help
 
-pre: tidy lint test vet helm-lint ## Run all quality checks
+info: ## Prints the current project info
+	@echo "app:        $(APP_NAME)"
+	@echo "version:    $(VERSION)"
+	@echo "commit:     $(COMMIT)"
+	@echo "branch:     $(BRANCH)"
+	@echo "go:         $(GO_VERSION)"
+	@echo "linter:     $(GOLINT_VERSION)"
+	@echo "goreleaser: $(GORELEASER_VERSION)"
+	@echo "coverage:   $(COVERAGE_THRESHOLD)%"
+	@echo "lint to:    $(LINT_TIMEOUT)"
+	@echo "test to:    $(TEST_TIMEOUT)"
 
-build: ## Build the Go binary locally
-	$(GO_ENV) go build -v -o bin/$(APP_NAME) main.go
+qualify: tidy lint test-coverage vet helm-lint ## Run all quality checks (tidy + lint + test-coverage + vet + helm-lint)
 
 release: ## Run GoReleaser release
 	goreleaser release --clean --fail-fast --timeout 30m
 
-build-snapshot: ## Run GoReleaser snapshot build (local dev)
+build: ## Run GoReleaser snapshot build (local dev)
 	goreleaser build --clean --single-target --snapshot
 
 clean: ## Clean the build artifacts
+	@set -e; \
 	$(GO_ENV) go clean -x; \
-	rm -f bin/$(APP_NAME)
+	rm -rf bin/$(APP_NAME) dist/ coverage.out
 
-tidy: ## Run go mod tidy in src
+tidy: ## Format code and update Go module dependencies
+	@set -e; \
 	$(GO_ENV) go fmt ./...; \
 	$(GO_ENV) go mod tidy
 
+fmt-check: ## CI-friendly format check (no modifications)
+	@test -z "$$(gofmt -l .)" || (echo "Code is not formatted. Run 'make tidy' to fix:"; gofmt -l .; exit 1)
+	@echo "Code formatting check passed"
+
 upgrade: ## Upgrades all dependencies
+	@set -e; \
 	$(GO_ENV) go get -u ./...; \
-	$(GO_ENV) go mod tidy;
+	$(GO_ENV) go mod tidy
 
-lint: ## Lint the Go code and YAML files
-	$(GO_ENV) golangci-lint -c .golangci.yaml run --modules-download-mode=readonly; \
-	yamllint -c .yamllint $(YAML_FILES)
+lint: lint-go lint-yaml ## Lint Go and YAML
 
-test: ## Run Go tests and generate coverage report
-	$(GO_ENV) go test -count=1 -covermode=atomic -coverprofile=coverage.out ./... || exit 1; \
-	echo "Generating coverage report..."; \
-	$(GO_ENV) go tool cover -func=coverage.out
+lint-go: ## Lint Go code
+	@$(GO_ENV) golangci-lint -c .golangci.yaml run --modules-download-mode=readonly --timeout=$(LINT_TIMEOUT)
+
+lint-yaml: ## Lint YAML files
+	@yamllint -c .yamllint $(YAML_FILES)
+
+test: ## Run Go tests with race detector and coverage
+	@set -e; \
+	$(GO_ENV) go test -count=1 -race -timeout=$(TEST_TIMEOUT) -covermode=atomic -coverprofile=coverage.out ./...; \
+	echo "Test coverage:"; \
+	$(GO_ENV) go tool cover -func=coverage.out | tail -1
+
+test-coverage: test ## Run tests and enforce coverage threshold
+	@set -e; \
+	coverage=$$($(GO_ENV) go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	echo "Coverage: $$coverage% (threshold: $(COVERAGE_THRESHOLD)%)"; \
+	awk -v c="$$coverage" -v t="$(COVERAGE_THRESHOLD)" 'BEGIN { if (c+0 < t+0) exit 1 }' || \
+	  (echo "ERROR: Coverage $$coverage% is below threshold $(COVERAGE_THRESHOLD)%"; exit 1); \
+	echo "Coverage check passed"
+
+bench: ## Run benchmarks
+	@$(GO_ENV) go test -bench=. -benchmem ./...
 
 vet: ## Vet the Go code
-	$(GO_ENV) go vet ./...
+	@$(GO_ENV) go vet ./...
 
 bump-major: ## Bump major version (1.2.3 → 2.0.0)
 	tools/bump major
@@ -70,11 +111,11 @@ down: ## Delete a Kubernetes cluster with KinD
 	kind delete cluster --name $(APP_NAME)
 
 integration: ## Run integration tests
-	@echo "Running integration tests..."; \
-	bash tests/integration 2 || exit 1;
+	@echo "Running integration tests..."
+	@bash tests/integration 2
 
 helm-lint: ## Lint the Helm chart
-	helm lint chart/
+	@helm lint chart/
 
 helm-publish: ## Package and push Helm chart to OCI registry
 	@TAG=$${TAG:?TAG is required}; \
@@ -88,5 +129,4 @@ helm-publish: ## Package and push Helm chart to OCI registry
 help: ## Displays available commands
 	@echo "Available make targets:"; \
 	grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk \
-		'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
-
+		'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'

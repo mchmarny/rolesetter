@@ -15,6 +15,9 @@ builds:
       - -w
       - -s
       - -extldflags "-static"
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.CommitDate}}
     goos:
       - linux
     goarch:

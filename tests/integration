@@ -63,7 +63,7 @@ if [[ $(echo "$worker_nodes" | wc -l) -lt $WORKER_NODES ]]; then
 fi
 
 # Edit nodeGroup label on first worker node to 'test'
-first_node=$(echo $worker_nodes | awk '{print $1}')
+first_node=$(echo "$worker_nodes" | head -n1)
 kubectl label "$first_node" nodeGroup=test --overwrite
 
 # Wait for controller to assign test role label

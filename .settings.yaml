@@ -3,29 +3,35 @@
 
 # Language Versions
 languages:
-  go: '1.26.0'
+  go: '1.26.4'
 
 # Security Scanning
 scanning:
-  trivy: '0.69.1'
+  trivy: '0.71.0'
   scan_severity: 'CRITICAL,HIGH,MEDIUM'
 
 # Linting
 linting:
-  golangci_lint: 'v2.10.1'
+  golangci_lint: 'v2.12.1'
 
 # Build Configuration
 build:
   registry: 'ghcr.io'
-  goreleaser: 'v2.14.1'
+  goreleaser: 'v2.16.0'
 
 # Testing Configuration
 testing:
-  kind_version: '0.29.0'
-  k8s_version: '1.33.x'
-  kind_node_image: 'kindest/node:v1.33.1'
+  kind_version: '0.32.0'
+  k8s_version: '1.34.x'
+  kind_node_image: 'kindest/node:v1.34.8'
   worker_node_count: '2'
 
 # Signing
 signing:
-  cosign: 'v2.5.0'
+  cosign: 'v3.1.0'
+
+# Quality gates
+quality:
+  coverage_threshold: '70'
+  lint_timeout: '5m'
+  test_timeout: '10m'

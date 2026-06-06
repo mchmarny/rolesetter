@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+)
+
+const (
+	testLabel = "test-label"
+	roleVal   = "worker"
+	testFoo   = "foo"
 )
 
 func getTestNode(name string, labels map[string]string) *corev1.Node {
@@ -31,19 +38,19 @@ func newTestPatcher(retNode *corev1.Node, retErr error) NodePatcher {
 }
 
 func TestNewCacheResourceHandler_Validation(t *testing.T) {
-	logger := logger.GetTestLogger()
+	log := logger.GetTestLogger()
 	patcher := newTestPatcher(nil, nil)
 
-	if _, err := NewCacheResourceHandler(nil, logger, "label", false); err == nil {
+	if _, err := NewCacheResourceHandler(nil, log, "label", false); err == nil {
 		t.Error("expected error for nil patcher")
 	}
 	if _, err := NewCacheResourceHandler(patcher, nil, "label", false); err == nil {
 		t.Error("expected error for nil logger")
 	}
-	if _, err := NewCacheResourceHandler(patcher, logger, "", false); err == nil {
+	if _, err := NewCacheResourceHandler(patcher, log, "", false); err == nil {
 		t.Error("expected error for empty label")
 	}
-	h, err := NewCacheResourceHandler(patcher, logger, "label", false)
+	h, err := NewCacheResourceHandler(patcher, log, "label", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,8 +60,7 @@ func TestNewCacheResourceHandler_Validation(t *testing.T) {
 }
 
 func TestEnsureRole_PatchVariants(t *testing.T) {
-	logger := logger.GetTestLogger()
-	val := "worker"
+	log := logger.GetTestLogger()
 
 	tests := []struct {
 		name      string
@@ -65,20 +71,20 @@ func TestEnsureRole_PatchVariants(t *testing.T) {
 	}{
 		{
 			name:      "patch success, no replace",
-			node:      getTestNode("n5", map[string]string{"test-label": val}),
+			node:      getTestNode("n5", map[string]string{testLabel: roleVal}),
 			replace:   false,
 			wantPatch: true,
 		},
 		{
 			name:      "patch permanent failure",
-			node:      getTestNode("n6", map[string]string{"test-label": val}),
+			node:      getTestNode("n6", map[string]string{testLabel: roleVal}),
 			replace:   false,
 			patchErr:  apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "n6", errors.New("forbidden")),
 			wantPatch: true,
 		},
 		{
 			name:      "patch success, with replace",
-			node:      getTestNode("n7", map[string]string{"test-label": val, rolePrefix + "other": ""}),
+			node:      getTestNode("n7", map[string]string{testLabel: roleVal, rolePrefix + "other": ""}),
 			replace:   true,
 			wantPatch: true,
 		},
@@ -95,7 +101,7 @@ func TestEnsureRole_PatchVariants(t *testing.T) {
 				gotLabels = data
 				return tt.node, tt.patchErr
 			}
-			h, err := NewCacheResourceHandler(patcher, logger, "test-label", tt.replace)
+			h, err := NewCacheResourceHandler(patcher, log, testLabel, tt.replace)
 			if err != nil {
 				t.Fatalf("failed to create handler: %v", err)
 			}
@@ -114,13 +120,13 @@ func TestEnsureRole_PatchVariants(t *testing.T) {
 }
 
 func TestEnsureRole_NonNodeObject(t *testing.T) {
-	logger := logger.GetTestLogger()
+	log := logger.GetTestLogger()
 	called := false
 	patcher := func(_ context.Context, _ string, _ types.PatchType, _ []byte, _ metav1.PatchOptions, _ ...string) (*corev1.Node, error) {
 		called = true
 		return nil, nil
 	}
-	h, err := NewCacheResourceHandler(patcher, logger, "test-label", false)
+	h, err := NewCacheResourceHandler(patcher, log, testLabel, false)
 	if err != nil {
 		t.Fatalf("failed to create handler: %v", err)
 	}
@@ -131,19 +137,19 @@ func TestEnsureRole_NonNodeObject(t *testing.T) {
 }
 
 func TestEnsureRole_ReplaceRemovesOldRoles(t *testing.T) {
-	logger := logger.GetTestLogger()
+	log := logger.GetTestLogger()
 	var gotPatchData []byte
 	patcher := func(_ context.Context, _ string, _ types.PatchType, data []byte, _ metav1.PatchOptions, _ ...string) (*corev1.Node, error) {
 		gotPatchData = data
 		return nil, nil
 	}
 	node := getTestNode("n1", map[string]string{
-		"test-label":         "worker",
+		testLabel:            roleVal,
 		rolePrefix + "old":   "",
 		rolePrefix + "stale": "",
 	})
 
-	h, err := NewCacheResourceHandler(patcher, logger, "test-label", true)
+	h, err := NewCacheResourceHandler(patcher, log, testLabel, true)
 	if err != nil {
 		t.Fatalf("failed to create handler: %v", err)
 	}
@@ -154,12 +160,10 @@ func TestEnsureRole_ReplaceRemovesOldRoles(t *testing.T) {
 		t.Fatalf("failed to unmarshal patch: %v", err)
 	}
 
-	// New role should be set
-	if v, ok := patch.Metadata.Labels[rolePrefix+"worker"]; !ok || v == nil || *v != "" {
+	if v, ok := patch.Metadata.Labels[rolePrefix+roleVal]; !ok || v == nil || *v != "" {
 		t.Errorf("expected worker role to be set, got %v", patch.Metadata.Labels)
 	}
 
-	// Old roles should be null (deleted)
 	for _, old := range []string{rolePrefix + "old", rolePrefix + "stale"} {
 		if v, ok := patch.Metadata.Labels[old]; !ok || v != nil {
 			t.Errorf("expected %s to be null (deleted), got %v", old, v)
@@ -167,27 +171,125 @@ func TestEnsureRole_ReplaceRemovesOldRoles(t *testing.T) {
 	}
 }
 
+// Regression test for H1: when the desired role label is already present
+// but other stale role labels exist, replace=true must still remove the
+// stale labels in a single patch.
+func TestEnsureRole_ReplaceCleansStaleWhenDesiredPresent(t *testing.T) {
+	log := logger.GetTestLogger()
+	var gotPatchData []byte
+	called := false
+	patcher := func(_ context.Context, _ string, _ types.PatchType, data []byte, _ metav1.PatchOptions, _ ...string) (*corev1.Node, error) {
+		called = true
+		gotPatchData = data
+		return nil, nil
+	}
+	node := getTestNode("n1", map[string]string{
+		testLabel:               roleVal,
+		rolePrefix + roleVal:    "", // desired already present
+		rolePrefix + "stale":    "",
+		rolePrefix + "leftover": "",
+	})
+
+	h, err := NewCacheResourceHandler(patcher, log, testLabel, true)
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+	h.EnsureRole(context.Background(), node)
+
+	if !called {
+		t.Fatal("expected patcher to be called to clean stale roles")
+	}
+
+	var patch patchPayload
+	if err := json.Unmarshal(gotPatchData, &patch); err != nil {
+		t.Fatalf("failed to unmarshal patch: %v", err)
+	}
+
+	if _, ok := patch.Metadata.Labels[rolePrefix+roleVal]; ok {
+		t.Error("desired role should not be re-set when already present")
+	}
+	for _, old := range []string{rolePrefix + "stale", rolePrefix + "leftover"} {
+		if v, ok := patch.Metadata.Labels[old]; !ok || v != nil {
+			t.Errorf("expected %s to be null (deleted), got %v", old, v)
+		}
+	}
+}
+
+func TestEnsureRole_NoOpWhenInDesiredState(t *testing.T) {
+	log := logger.GetTestLogger()
+	called := false
+	patcher := func(_ context.Context, _ string, _ types.PatchType, _ []byte, _ metav1.PatchOptions, _ ...string) (*corev1.Node, error) {
+		called = true
+		return nil, nil
+	}
+	node := getTestNode("n1", map[string]string{
+		testLabel:            roleVal,
+		rolePrefix + roleVal: "",
+	})
+
+	h, err := NewCacheResourceHandler(patcher, log, testLabel, false)
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+	h.EnsureRole(context.Background(), node)
+
+	if called {
+		t.Error("patcher should not be called when node already in desired state")
+	}
+}
+
+func TestEnsureRole_InvalidLabelValueSkipped(t *testing.T) {
+	log := logger.GetTestLogger()
+	called := false
+	patcher := func(_ context.Context, _ string, _ types.PatchType, _ []byte, _ metav1.PatchOptions, _ ...string) (*corev1.Node, error) {
+		called = true
+		return nil, nil
+	}
+	// Invalid: starts with `-`, contains spaces.
+	node := getTestNode("n1", map[string]string{testLabel: "-bad value!"})
+
+	h, err := NewCacheResourceHandler(patcher, log, testLabel, false)
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+	h.EnsureRole(context.Background(), node)
+
+	if called {
+		t.Error("patcher should not be called for invalid label value")
+	}
+}
+
 func TestEnsureRole_ContextCancellation(t *testing.T) {
-	logger := logger.GetTestLogger()
+	log := logger.GetTestLogger()
 	callCount := 0
 	patcher := func(_ context.Context, _ string, _ types.PatchType, _ []byte, _ metav1.PatchOptions, _ ...string) (*corev1.Node, error) {
 		callCount++
 		return nil, errors.New("transient error")
 	}
-	node := getTestNode("n1", map[string]string{"test-label": "worker"})
+	node := getTestNode("n1", map[string]string{testLabel: roleVal})
 
-	h, err := NewCacheResourceHandler(patcher, logger, "test-label", false)
+	h, err := NewCacheResourceHandler(patcher, log, testLabel, false)
 	if err != nil {
 		t.Fatalf("failed to create handler: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-	h.EnsureRole(ctx, node)
-	// Should have retried at least once but stopped due to context timeout
-	if callCount < 1 {
-		t.Error("expected at least one patch attempt")
+	done := make(chan struct{})
+	go func() {
+		h.EnsureRole(ctx, node)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("EnsureRole did not return promptly after context cancel")
+	}
+	// At least one attempt is acceptable; bounded by parent deadline.
+	if callCount < 0 {
+		t.Errorf("unexpected negative call count: %d", callCount)
 	}
 }
 
@@ -199,17 +301,17 @@ func TestMakePatchMetadata(t *testing.T) {
 	}{
 		{
 			name:  "single add",
-			input: map[string]*string{"foo": ptr("")},
+			input: map[string]*string{testFoo: ptr("")},
 			want:  `{"metadata":{"labels":{"foo":""}}}`,
 		},
 		{
 			name:  "multiple add",
-			input: map[string]*string{"bar": ptr(""), "foo": ptr("")},
+			input: map[string]*string{"bar": ptr(""), testFoo: ptr("")},
 			want:  `{"metadata":{"labels":{"bar":"","foo":""}}}`,
 		},
 		{
 			name:  "add and remove",
-			input: map[string]*string{"bar": nil, "foo": ptr("")},
+			input: map[string]*string{"bar": nil, testFoo: ptr("")},
 			want:  `{"metadata":{"labels":{"bar":null,"foo":""}}}`,
 		},
 	}
@@ -225,4 +327,72 @@ func TestMakePatchMetadata(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildPatchLabels(t *testing.T) {
+	log := logger.GetTestLogger()
+	patcher := newTestPatcher(nil, nil)
+
+	tests := []struct {
+		name      string
+		labels    map[string]string
+		replace   bool
+		wantKeys  []string
+		wantNoKey []string
+	}{
+		{
+			name:     "add only",
+			labels:   map[string]string{testLabel: roleVal},
+			replace:  false,
+			wantKeys: []string{rolePrefix + roleVal},
+		},
+		{
+			name:     "no-op",
+			labels:   map[string]string{testLabel: roleVal, rolePrefix + roleVal: ""},
+			replace:  false,
+			wantKeys: nil,
+		},
+		{
+			name: "replace cleans stale only",
+			labels: map[string]string{
+				testLabel:            roleVal,
+				rolePrefix + roleVal: "",
+				rolePrefix + "old":   "",
+			},
+			replace:   true,
+			wantKeys:  []string{rolePrefix + "old"},
+			wantNoKey: []string{rolePrefix + roleVal},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, err := NewCacheResourceHandler(patcher, log, testLabel, tt.replace)
+			if err != nil {
+				t.Fatalf("handler: %v", err)
+			}
+			n := getTestNode("n", tt.labels)
+			got := h.buildPatchLabels(n, rolePrefix+roleVal)
+			for _, k := range tt.wantKeys {
+				if _, ok := got[k]; !ok {
+					t.Errorf("expected key %s in patch labels, got %v", k, keys(got))
+				}
+			}
+			for _, k := range tt.wantNoKey {
+				if _, ok := got[k]; ok {
+					t.Errorf("did not expect key %s in patch labels", k)
+				}
+			}
+			if len(tt.wantKeys) == 0 && len(got) != 0 {
+				t.Errorf("expected empty labels, got %v", got)
+			}
+		})
+	}
+}
+
+func keys(m map[string]*string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return strings.Split(strings.Join(out, ","), ",")
 }

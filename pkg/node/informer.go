@@ -1,11 +1,16 @@
+// Package node owns the controller lifecycle: clientset construction,
+// metrics-server bring-up, leader election (when a namespace is provided),
+// and the shared informer that drives node-role reconciliation.
 package node
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mchmarny/rolesetter/pkg/logger"
@@ -30,7 +35,7 @@ const (
 	retryPeriod        = 2 * time.Second
 )
 
-// Informer is responsible for managing the node role setter controller.
+// Informer manages the controller lifecycle.
 type Informer struct {
 	logger    *zap.Logger
 	label     string
@@ -39,54 +44,69 @@ type Informer struct {
 	namespace string
 	clientset kubernetes.Interface
 	server    server.Server
+
+	cacheSynced atomic.Bool
+	leading     atomic.Bool
 }
 
 // Option is a functional option for configuring Informer.
 type Option func(*Informer)
 
+// WithReplace controls whether existing node-role.kubernetes.io/* labels
+// other than the desired one are removed during reconciliation.
 func WithReplace(replace bool) Option {
 	return func(i *Informer) {
 		i.replace = replace
 	}
 }
 
-// WithLogger sets the logger for the Informer.
+// WithLogger sets the zap logger used by the controller.
 func WithLogger(logger *zap.Logger) Option {
 	return func(i *Informer) {
 		i.logger = logger
 	}
 }
 
-// WithLabel sets the label for the Informer.
+// WithLabel sets the source label whose value becomes the node role.
 func WithLabel(label string) Option {
 	return func(i *Informer) {
 		i.label = label
 	}
 }
 
-// WithPort sets the port for the Informer.
+// WithPort sets the listen port for the metrics/health HTTP server.
 func WithPort(port int) Option {
 	return func(i *Informer) {
 		i.port = port
 	}
 }
 
-// WithClientset sets the Kubernetes clientset for the Informer.
+// WithClientset injects a Kubernetes clientset. When omitted, an
+// in-cluster clientset is constructed at NewInformer time.
 func WithClientset(cs kubernetes.Interface) Option {
 	return func(i *Informer) {
 		i.clientset = cs
 	}
 }
 
-// WithNamespace sets the namespace for leader election.
-// When set, leader election is enabled using a Lease in this namespace.
+// WithNamespace enables leader election via a coordination.k8s.io/Lease
+// in the supplied namespace. When empty, the controller runs without
+// leader election (single-replica deployments).
 func WithNamespace(ns string) Option {
 	return func(i *Informer) {
 		i.namespace = ns
 	}
 }
 
-// NewInformer creates a new Informer instance using functional options.
+// WithServer injects a custom Server implementation. Primarily intended
+// for tests; when omitted, NewInformer constructs the default server.
+func WithServer(s server.Server) Option {
+	return func(i *Informer) {
+		i.server = s
+	}
+}
+
+// NewInformer constructs and validates an Informer.
 func NewInformer(opts ...Option) (*Informer, error) {
 	i := &Informer{
 		logger: logger.GetLogger(),
@@ -97,7 +117,6 @@ func NewInformer(opts ...Option) (*Informer, error) {
 		opt(i)
 	}
 
-	// set these AFTER options are applied to allow testing to override
 	if i.clientset == nil {
 		cs, err := newClient()
 		if err != nil {
@@ -110,6 +129,7 @@ func NewInformer(opts ...Option) (*Informer, error) {
 		i.server = server.NewServer(
 			server.WithLogger(i.logger),
 			server.WithPort(i.port),
+			server.WithReady(i.ready),
 		)
 	}
 
@@ -119,27 +139,35 @@ func NewInformer(opts ...Option) (*Informer, error) {
 	return i, nil
 }
 
-// validate checks if the Informer has valid configuration.
+// validate checks that the Informer is fully configured.
 func (i *Informer) validate() error {
 	if i.logger == nil {
-		return fmt.Errorf("logger must not be nil")
+		return errors.New("logger must not be nil")
 	}
 	if i.label == "" {
-		return fmt.Errorf("roleLabel must be specified")
+		return errors.New("roleLabel must be specified")
 	}
 	if i.port <= 0 {
-		return fmt.Errorf("serverPort must be a positive integer")
+		return errors.New("serverPort must be a positive integer")
 	}
 	if i.clientset == nil {
-		return fmt.Errorf("kubernetes clientset must not be nil")
+		return errors.New("kubernetes clientset must not be nil")
 	}
 	if i.server == nil {
-		return fmt.Errorf("server must not be nil")
+		return errors.New("server must not be nil")
 	}
 	return nil
 }
 
-// Inform runs the node role setter controller with context, logger, and config.
+// ready is the readiness predicate consulted by /readyz. The replica is
+// ready when (a) the informer cache has synced at least once, and (b) it
+// is the active leader (always true when leader election is disabled).
+func (i *Informer) ready() bool {
+	return i.cacheSynced.Load() && (i.namespace == "" || i.leading.Load())
+}
+
+// Inform starts the metrics server and node informer. It returns the first
+// fatal error from either, or nil on graceful shutdown via ctx cancel.
 func (i *Informer) Inform(ctx context.Context) error {
 	if err := i.validate(); err != nil {
 		return fmt.Errorf("validation error: %w", err)
@@ -149,34 +177,50 @@ func (i *Informer) Inform(ctx context.Context) error {
 		zap.String("label", i.label),
 		zap.Int("port", i.port),
 		zap.String("namespace", i.namespace),
+		zap.Bool("replace", i.replace),
 	)
 
-	// Start metrics server (always runs, regardless of leadership)
-	var wg sync.WaitGroup
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		wg     sync.WaitGroup
+		srvErr error
+		runErr error
+	)
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		i.server.Serve(ctx, map[string]http.Handler{
+		if err := i.server.Serve(runCtx, map[string]http.Handler{
 			"/metrics": metric.GetHandler(),
-		})
+		}); err != nil {
+			srvErr = err
+			i.logger.Error("metrics server exited with error", zap.Error(err))
+			cancel()
+		}
 	}()
 
-	// Run informer with or without leader election
 	if i.namespace != "" {
-		if err := i.runWithLeaderElection(ctx); err != nil {
-			return err
-		}
+		runErr = i.runWithLeaderElection(runCtx, cancel)
 	} else {
-		if err := i.runInformer(ctx); err != nil {
-			return err
-		}
+		i.leading.Store(true)
+		runErr = i.runInformer(runCtx)
 	}
 
+	cancel()
 	wg.Wait()
-	return nil
+
+	if runErr != nil {
+		return runErr
+	}
+	return srvErr
 }
 
-func (i *Informer) runWithLeaderElection(ctx context.Context) error {
+// runWithLeaderElection drives the informer under leader election. The
+// supplied cancel is invoked on any informer failure to release the lease
+// (ReleaseOnCancel) and signal the metrics goroutine to shut down.
+func (i *Informer) runWithLeaderElection(ctx context.Context, cancel context.CancelFunc) error {
 	id, err := os.Hostname()
 	if err != nil {
 		return fmt.Errorf("failed to get hostname: %w", err)
@@ -198,6 +242,7 @@ func (i *Informer) runWithLeaderElection(ctx context.Context) error {
 		},
 	}
 
+	var informerErr error
 	le, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
 		Lock:            lock,
 		ReleaseOnCancel: true,
@@ -205,12 +250,17 @@ func (i *Informer) runWithLeaderElection(ctx context.Context) error {
 		RenewDeadline:   renewDeadline,
 		RetryPeriod:     retryPeriod,
 		Callbacks: leaderelection.LeaderCallbacks{
-			OnStartedLeading: func(ctx context.Context) {
-				if runErr := i.runInformer(ctx); runErr != nil {
-					i.logger.Error("informer failed", zap.Error(runErr))
+			OnStartedLeading: func(cbCtx context.Context) {
+				i.leading.Store(true)
+				if runErr := i.runInformer(cbCtx); runErr != nil {
+					i.logger.Error("informer failed; releasing leadership", zap.Error(runErr))
+					informerErr = runErr
+					cancel()
 				}
 			},
 			OnStoppedLeading: func() {
+				i.leading.Store(false)
+				i.cacheSynced.Store(false)
 				i.logger.Info("lost leadership")
 			},
 			OnNewLeader: func(identity string) {
@@ -226,9 +276,11 @@ func (i *Informer) runWithLeaderElection(ctx context.Context) error {
 	}
 
 	le.Run(ctx)
-	return nil
+	return informerErr
 }
 
+// runInformer wires the node informer and blocks until ctx is canceled or
+// initial cache sync fails.
 func (i *Informer) runInformer(ctx context.Context) error {
 	handler, err := role.NewCacheResourceHandler(
 		i.clientset.CoreV1().Nodes().Patch,
@@ -240,25 +292,38 @@ func (i *Informer) runInformer(ctx context.Context) error {
 		return fmt.Errorf("failed to create role handler: %w", err)
 	}
 
-	factory := informers.NewSharedInformerFactory(i.clientset, resyncInterval)
-	eventHandler := cache.ResourceEventHandlerFuncs{
+	// Restrict the watch to nodes carrying the source label so we don't
+	// fan out events for nodes we cannot act on. This trims watch traffic
+	// on large clusters at no correctness cost — the reconciler is still
+	// a no-op for nodes lacking the label.
+	tweak := func(opts *metav1.ListOptions) {
+		opts.LabelSelector = i.label
+	}
+	factory := informers.NewSharedInformerFactoryWithOptions(
+		i.clientset,
+		resyncInterval,
+		informers.WithTweakListOptions(tweak),
+	)
+
+	inf := factory.Core().V1().Nodes().Informer()
+	if _, err := inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			handler.EnsureRole(ctx, obj)
 		},
 		UpdateFunc: func(_, newObj interface{}) {
 			handler.EnsureRole(ctx, newObj)
 		},
-	}
-
-	inf := factory.Core().V1().Nodes().Informer()
-	if _, err := inf.AddEventHandler(eventHandler); err != nil {
+	}); err != nil {
 		return fmt.Errorf("failed to add event handler: %w", err)
 	}
 
 	factory.Start(ctx.Done())
 	if !cache.WaitForCacheSync(ctx.Done(), inf.HasSynced) {
-		return fmt.Errorf("cache sync failed")
+		return errors.New("cache sync failed")
 	}
+	i.cacheSynced.Store(true)
+	i.logger.Info("informer cache synced")
+
 	<-ctx.Done()
 	return nil
 }

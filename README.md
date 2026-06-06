@@ -6,7 +6,26 @@ Kubernetes controller that automatically assigns node roles based on a configura
 
 By default, `kubeadm` enables the NodeRestriction admission controller that restricts what labels `kubelet` can self-apply on node registration. The `node-role.kubernetes.io/*` label is restricted and can't be set in cloud init scripts or during other node bootstrap processes.
 
+## How it works
+
+1. Nodes are labeled with a source label (e.g., `nodeGroup=gpu-worker`).
+2. The controller watches `Node` add/update events via a Kubernetes informer, scoped to nodes that carry the source label.
+3. When a node has the source label, the controller patches it with `node-role.kubernetes.io/<value>` via a strategic merge patch with bounded exponential backoff.
+4. In `replace` mode, any stale `node-role.kubernetes.io/*` labels (other than the desired one) are removed in the same patch.
+5. Leader election via `coordination.k8s.io/Lease` ensures only one replica reconciles at a time when running with `replicas >= 2`.
+
+Readiness (`/readyz`) returns 503 until the informer cache has synced — and, when leader election is enabled, until the replica is the active leader.
+
+**Example:** A node with `nodeGroup=gpu-worker` gets `node-role.kubernetes.io/gpu-worker`.
+
 ## Install
+
+The Helm chart and the prebuilt manifest install into different namespaces by default:
+
+| Install method | Default namespace |
+|---|---|
+| Helm (recommended) | whatever you pass via `-n` (the README uses `node-role-controller`) |
+| `deployment/manifest.yaml` and Kustomize overlays | `node-labeler` (encoded in the manifests) |
 
 ### Helm (recommended)
 
@@ -25,6 +44,17 @@ helm upgrade --install node-role-controller \
   oci://ghcr.io/mchmarny/node-role-controller \
   -n node-role-controller --create-namespace \
   --set-json 'tolerations=[{"key":"dedicated","value":"system-workload","operator":"Equal","effect":"NoExecute"},{"key":"dedicated","value":"system-workload","operator":"Equal","effect":"NoSchedule"}]'
+```
+
+To enable Prometheus Operator scraping and a PodDisruptionBudget:
+
+```shell
+helm upgrade --install node-role-controller \
+  oci://ghcr.io/mchmarny/node-role-controller \
+  -n node-role-controller --create-namespace \
+  --set replicas=2 \
+  --set serviceMonitor.enabled=true \
+  --set podDisruptionBudget.enabled=true
 ```
 
 ### Manifest
@@ -55,7 +85,7 @@ helm upgrade --install node-role-controller \
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `config.roleLabel` | `nodeGroup` | Source label whose value becomes the node role |
-| `config.roleReplace` | `false` | Replace existing `node-role.kubernetes.io/*` labels |
+| `config.roleReplace` | `false` | Replace existing `node-role.kubernetes.io/*` labels other than the desired one |
 | `config.logLevel` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 | `replicas` | `1` | Number of controller replicas (leader election enabled) |
 | `image.tag` | Chart `appVersion` | Override the image tag |
@@ -65,6 +95,22 @@ helm upgrade --install node-role-controller \
 | `resources.limits.memory` | `256Mi` | Memory limit |
 | `tolerations` | `[]` | Pod tolerations |
 | `nodeSelector` | `{}` | Pod node selector |
+| `serviceMonitor.enabled` | `false` | Create a headless Service and Prometheus Operator ServiceMonitor |
+| `serviceMonitor.interval` | `30s` | Scrape interval |
+| `serviceMonitor.scrapeTimeout` | `10s` | Scrape timeout |
+| `serviceMonitor.labels` | `{}` | Extra labels on the ServiceMonitor |
+| `podDisruptionBudget.enabled` | `false` | Create a PDB (only effective when `replicas > 1`) |
+| `podDisruptionBudget.minAvailable` | `1` | `minAvailable` for the PDB |
+
+Environment variables (when running the binary directly or via the manifests):
+
+| Variable | Default | Description |
+|---|---|---|
+| `ROLE_LABEL` | _(required)_ | Source label to watch (e.g., `nodeGroup`) |
+| `ROLE_LABEL_REPLACE` | `false` | `true`/`false`/`1`/`0`/`yes`/`no` — replace stale role labels |
+| `NAMESPACE` | _(unset)_ | Enables leader election via a Lease in this namespace |
+| `SERVER_PORT` | `8080` | Metrics/health HTTP server port |
+| `LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error` |
 
 > After changing configuration, restart to apply: `kubectl -n node-role-controller rollout restart deployment node-role-controller`
 
@@ -74,23 +120,29 @@ helm upgrade --install node-role-controller \
 helm uninstall node-role-controller -n node-role-controller
 ```
 
-## How It Works
+## Observability
 
-1. Nodes are labeled with a source label (e.g., `nodeGroup=gpu-worker`)
-2. The controller watches node add/update events via a Kubernetes informer
-3. When a node has the source label, the controller patches it with `node-role.kubernetes.io/<value>`
-4. Leader election via Lease ensures only one replica is active
-
-**Example:** A node with `nodeGroup=gpu-worker` gets `node-role.kubernetes.io/gpu-worker`.
-
-## Metrics
+| Endpoint | Purpose |
+|---|---|
+| `/metrics` | Prometheus metrics |
+| `/healthz` | Liveness probe (always 200 once HTTP is listening) |
+| `/readyz` | Readiness probe — 503 until cache sync + (if applicable) lease ownership |
 
 | Metric | Description |
 |--------|-------------|
-| `node_role_patch_success_total` | Successful patch operations (labeled by role) |
-| `node_role_patch_failure_total` | Failed patch operations (labeled by role) |
+| `node_role_patch_success_total{role=...}` | Successful patch operations |
+| `node_role_patch_failure_total{role=...}` | Failed patch operations (including permanently invalid label values) |
 
-Available at `/metrics` on port `8080`. Health at `/healthz`, readiness at `/readyz`.
+Default port: `8080`. Override with `SERVER_PORT`.
+
+## Version
+
+The binary prints build metadata injected at release time:
+
+```shell
+node-role-controller -version
+# node-role-controller v0.7.0 (commit abcdef0, built 2026-06-06T12:34:56Z)
+```
 
 ## Image Verification
 

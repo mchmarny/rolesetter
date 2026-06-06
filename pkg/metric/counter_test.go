@@ -4,6 +4,8 @@ import (
 	"testing"
 )
 
+const statusLabel = "status"
+
 func TestCounter_Inc_Table(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -11,9 +13,9 @@ func TestCounter_Inc_Table(t *testing.T) {
 		labelName  string
 		labelValue string
 	}{
-		{"test_success", "success counter", "status", "success"},
-		{"test_failure", "failure counter", "status", "failure"},
-		{"test_pending", "pending counter", "status", "pending"},
+		{"test_success", "success counter", statusLabel, "success"},
+		{"test_failure", "failure counter", statusLabel, "failure"},
+		{"test_pending", "pending counter", statusLabel, "pending"},
 	}
 	for _, tt := range tests {
 		c := NewCounter(tt.name, tt.help, tt.labelName)
@@ -33,7 +35,6 @@ func TestCounter_SafeReRegistration(t *testing.T) {
 	if c1 == nil || c2 == nil {
 		t.Fatal("NewCounter returned nil on re-registration")
 	}
-	// Both should work without panic
 	c1.Increment("a")
 	c2.Increment("b")
 }

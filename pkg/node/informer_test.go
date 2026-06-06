@@ -2,97 +2,62 @@ package node
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/mchmarny/rolesetter/pkg/logger"
 	"github.com/mchmarny/rolesetter/pkg/server"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-func TestInformer_Validate(t *testing.T) {
-	logger := logger.GetTestLogger()
-	clientset := fake.NewClientset()
-	srv := server.NewServer(
-		server.WithLogger(logger),
-		server.WithPort(8080),
+type fakeServer struct {
+	served chan struct{}
+	err    error
+}
+
+func (f *fakeServer) Serve(ctx context.Context, _ map[string]http.Handler) error {
+	if f.served != nil {
+		close(f.served)
+	}
+	if f.err != nil {
+		return f.err
+	}
+	<-ctx.Done()
+	return nil
+}
+
+func newTestInformer(t *testing.T, srv server.Server) *Informer {
+	t.Helper()
+	cs := fake.NewClientset()
+	inf, err := NewInformer(
+		WithLogger(logger.GetTestLogger()),
+		WithLabel("test-label"),
+		WithPort(8080),
+		WithClientset(cs),
+		WithServer(srv),
 	)
+	if err != nil {
+		t.Fatalf("NewInformer: %v", err)
+	}
+	return inf
+}
+
+func TestInformer_Validate(t *testing.T) {
+	log := logger.GetTestLogger()
+	cs := fake.NewClientset()
+	srv := server.NewServer(server.WithLogger(log), server.WithPort(8080))
 
 	inf := &Informer{
-		logger:    logger,
+		logger:    log,
 		label:     "test-label",
 		port:      8080,
-		clientset: clientset,
+		clientset: cs,
 		server:    srv,
 	}
 	if err := inf.validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestInformer_Inform_ContextCancel(t *testing.T) {
-	logger := logger.GetTestLogger()
-	clientset := fake.NewClientset()
-	srv := server.NewServer(
-		server.WithLogger(logger),
-		server.WithPort(8080),
-	)
-
-	inf := &Informer{
-		logger:    logger,
-		label:     "test-label",
-		port:      8080,
-		clientset: clientset,
-		server:    srv,
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancel immediately
-	err := inf.Inform(ctx)
-	if err == nil {
-		t.Error("expected error due to context cancellation")
-	}
-}
-
-func TestWithReplace_SetsReplace(t *testing.T) {
-	i := &Informer{}
-	WithReplace(true)(i)
-	if !i.replace {
-		t.Error("WithReplace did not set replace to true")
-	}
-}
-
-func TestWithLogger_SetsLogger(t *testing.T) {
-	l := logger.GetTestLogger()
-	i := &Informer{}
-	WithLogger(l)(i)
-	if i.logger != l {
-		t.Error("WithLogger did not set logger")
-	}
-}
-
-func TestWithLabel_SetsLabel(t *testing.T) {
-	label := "foo"
-	i := &Informer{}
-	WithLabel(label)(i)
-	if i.label != label {
-		t.Error("WithLabel did not set label")
-	}
-}
-
-func TestWithPort_SetsPort(t *testing.T) {
-	port := 1234
-	i := &Informer{}
-	WithPort(port)(i)
-	if i.port != port {
-		t.Error("WithPort did not set port")
-	}
-}
-
-func TestWithNamespace_SetsNamespace(t *testing.T) {
-	ns := "test-ns"
-	i := &Informer{}
-	WithNamespace(ns)(i)
-	if i.namespace != ns {
-		t.Error("WithNamespace did not set namespace")
 	}
 }
 
@@ -116,14 +81,14 @@ func TestValidate_Errors(t *testing.T) {
 }
 
 func TestNewInformer_Validation(t *testing.T) {
-	logger := logger.GetTestLogger()
-	clientset := fake.NewClientset()
+	log := logger.GetTestLogger()
+	cs := fake.NewClientset()
 
 	inf, err := NewInformer(
-		WithLogger(logger),
+		WithLogger(log),
 		WithLabel("test-label"),
 		WithPort(8080),
-		WithClientset(clientset),
+		WithClientset(cs),
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -132,13 +97,123 @@ func TestNewInformer_Validation(t *testing.T) {
 		t.Fatal("expected non-nil informer")
 	}
 
-	// Missing label should fail validation
-	_, err = NewInformer(
-		WithLogger(logger),
+	if _, err := NewInformer(
+		WithLogger(log),
 		WithPort(8080),
-		WithClientset(clientset),
-	)
-	if err == nil {
+		WithClientset(cs),
+	); err == nil {
 		t.Error("expected error for missing label")
+	}
+}
+
+func TestInformer_Inform_GracefulShutdown(t *testing.T) {
+	srv := &fakeServer{served: make(chan struct{})}
+	inf := newTestInformer(t, srv)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- inf.Inform(ctx)
+	}()
+
+	select {
+	case <-srv.served:
+	case <-time.After(2 * time.Second):
+		t.Fatal("server.Serve never started")
+	}
+
+	// Wait for cache to sync before canceling so we exercise the
+	// graceful-shutdown path rather than the cache-sync-failure path.
+	if !waitForReady(inf, 2*time.Second) {
+		t.Fatal("informer cache never synced")
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Inform returned error on graceful shutdown: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Inform did not return after context cancel")
+	}
+}
+
+func waitForReady(inf *Informer, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if inf.ready() {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return false
+}
+
+func TestInformer_Inform_ServerError(t *testing.T) {
+	srv := &fakeServer{err: errors.New("listen fail")}
+	inf := newTestInformer(t, srv)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- inf.Inform(ctx)
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("expected error from Inform when server fails")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Inform did not return after server error")
+	}
+}
+
+func TestInformer_Ready(t *testing.T) {
+	srv := &fakeServer{served: make(chan struct{})}
+	inf := newTestInformer(t, srv)
+
+	if inf.ready() {
+		t.Error("expected not ready before cache sync")
+	}
+	inf.cacheSynced.Store(true)
+	if !inf.ready() {
+		t.Error("expected ready after cache sync (no namespace)")
+	}
+
+	inf.namespace = "test-ns"
+	if inf.ready() {
+		t.Error("expected not ready when namespace set but not leading")
+	}
+	inf.leading.Store(true)
+	if !inf.ready() {
+		t.Error("expected ready when leading + cache synced")
+	}
+}
+
+// Option setter unit tests
+func TestOptionSetters(t *testing.T) {
+	cases := []struct {
+		name  string
+		apply func(*Informer)
+		check func(*Informer) bool
+	}{
+		{"WithReplace", func(i *Informer) { WithReplace(true)(i) }, func(i *Informer) bool { return i.replace }},
+		{"WithLabel", func(i *Informer) { WithLabel("x")(i) }, func(i *Informer) bool { return i.label == "x" }},
+		{"WithPort", func(i *Informer) { WithPort(99)(i) }, func(i *Informer) bool { return i.port == 99 }},
+		{"WithNamespace", func(i *Informer) { WithNamespace("ns")(i) }, func(i *Informer) bool { return i.namespace == "ns" }},
+		{"WithLogger", func(i *Informer) { WithLogger(logger.GetTestLogger())(i) }, func(i *Informer) bool { return i.logger != nil }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			i := &Informer{}
+			c.apply(i)
+			if !c.check(i) {
+				t.Errorf("%s did not apply", c.name)
+			}
+		})
 	}
 }
