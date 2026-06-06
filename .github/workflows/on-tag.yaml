@@ -40,7 +40,7 @@ jobs:
       attestations: write
     steps:
 
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       with:
         fetch-depth: 0
 
@@ -55,13 +55,13 @@ jobs:
         cache-dependency-path: go.sum
 
     - name: Install GoReleaser
-      uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29  # v7.0.0
+      uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89  # v7.2.2
       with:
         install-only: true
         version: ${{ steps.versions.outputs.goreleaser }}
 
     - name: Login to GHCR
-      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+      uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
@@ -90,7 +90,7 @@ jobs:
         echo "name=${REPO}" >> "$GITHUB_OUTPUT"
 
     - name: Setup KinD Cluster
-      uses: chainguard-dev/actions/setup-kind@f45211d3e8f9d2676c6b8cdd6a765435e06c819d  # v1.6.13
+      uses: chainguard-dev/actions/setup-kind@05fbd381f7c158bd33c9bbf3a28f67852269fdf8  # v1.6.21
       with:
         kind-version: ${{ steps.versions.outputs.kind_version }}
         k8s-version: ${{ steps.versions.outputs.k8s_version }}
@@ -121,7 +121,7 @@ jobs:
 
     - name: Upload Scan Results
       if: always()
-      uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13  # v4.35.1
+      uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4.36.2
       with:
         sarif_file: trivy-results.sarif
 
@@ -133,7 +133,7 @@ jobs:
       contents: read
       packages: write
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
     - uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2  # v5.0.0
     - name: Login to GHCR
       run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
